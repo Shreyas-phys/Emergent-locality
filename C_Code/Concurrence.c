@@ -1,0 +1,1287 @@
+#define _CRT_SECURE_NO_DEPRECATE
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include "f2c.h"
+#include <time.h>
+
+#define ARR_D(i) (double *) calloc(i, sizeof(double))
+#define ARR_DC(i) (doublecomplex *) calloc(i, sizeof(doublecomplex))
+#define ARR_I(i) (int *) calloc(i, sizeof(int))
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+
+
+
+int ind(int* list);
+void spins(int index, int* s);
+void analyzetime(double* ts, double* ds, int nt);
+void Hpsi(double* ham, doublecomplex* psi, doublecomplex* psi1);
+void Hpsi2(doublecomplex* psi, doublecomplex* psi1);
+void rk(double* ham, doublecomplex* psi, doublecomplex* psi1, double dt);
+void multvec(double fact, doublecomplex* v, doublecomplex* v1);
+void multveci(double fact, doublecomplex* v, doublecomplex* v1);
+void addmultvec(doublecomplex* v0, double fact, doublecomplex* v, doublecomplex* v1);
+void compute_rho_pj(complex rho_z[4][4], doublecomplex* psit, int ns, int p, int j);
+double compute_concurrence(complex rho_z[4][4]);
+void hermitian_eigenvalues_4x4(complex A[4][4], double evals[4]);
+
+int choose(int n, int k);
+int cutind(int* list);
+void cutspins(int ind, int* s);
+
+int ns;
+integer n;
+
+doublecomplex* t1, * t2, * t3, * k1, * k2, * k3, * k4;
+
+double pi_value = 3.14159265358979323846;
+int nham;
+double* ham2;
+int* hind1, * hind2;
+int* mxsave;
+
+int main()
+{
+	srand(time(NULL));
+	int zgeevx_(char* balanc, char* doevl, char* doevr, char* rcnum,
+		integer * n, doublecomplex * prop, integer * ldprop,
+		doublecomplex * eval, doublecomplex * evecl, integer * ldevecl,
+		doublecomplex * evecr, integer * ldevecr, integer * ilo,
+		integer * ihi, doublereal * scale, doublereal * bnorm,
+		doublereal * rceval, doublereal * rcevecr,
+		doublecomplex * work, integer * dwork, doublereal * morework,
+		integer * info);
+	int dsyev_(char* jobz, char* uplo, integer * n, double* prop,
+		integer * lda, double* w, double* work,
+		integer * lwork, integer * info);
+
+
+
+	double* ham, * eval, * work, t, * dens, * probSpinFlip0, * probSpinFlip1, pr, rem, e0, mx, * crossCorrelation, * Correlation2, *Concurrence;
+	double* rho11a, * rho12ra, * rho12ia;
+	double* rho11na, * rho12rna, * rho12ina;
+	double d0, d1, d2, d3, d5, p, maxd, maxd2, * ts, * ds, * d2s, * ds0, * ds2, savenorm;
+	doublecomplex* psi, * psit, * psitdt, * ov;
+	integer lwork, info;
+
+
+	int i, j, k, kp, it, initb1, initb2; //removed initb
+	int* list1, * list2;// , * mxsave;
+	int dist;
+	int centerspin;
+	int varyVariable;
+	FILE* data, * survf, * fdens, * frhoa, * frhona, * fCorrelationFunc, * fCorrelation2, *fConcurrence;
+
+	int dyn = 1; //0 means use diagonalization, 1 means use runge kutta
+	int flip = 0;
+	int per = 1;	//////
+
+	FILE* fh_output;
+	FILE* fh_output2;
+	FILE* fBandProbs;
+
+	//mentions base file location
+	char* base = "D:\\OneDrive - Tulane University\\RESEARCH\\Quantum transport\\Code\\Plots\\B0LFIMwithLR\\Projectedband2ConcurrenceTest";
+	//char* base = "TestIPHJlongVariedN13Saturation";//// code to send to cypress
+	FILE* energy = fopen("D:\\OneDrive - Tulane University\\RESEARCH\\Quantum transport\\Code\\Plots\\TFIMwithLR\\Energy.txt", "w");
+	//FILE* energy = fopen("Energy.txt", "w");
+
+
+	//Writing to file to another directory
+	for (varyVariable = 3; varyVariable < 4; varyVariable += 1)
+	{
+		char filenameNA[256];
+		char filenameA[256];
+		char filenameFrhoNA[256];
+		char filenameFrhoA[256];
+		char filenameCorrelationFunction[256];
+		char filenameCorrelation2[256];
+		char filenamebandProbabilities[256];
+		char filenameConcurrence[256];
+
+		// dynamically changes filename while in varyVariable loop
+		sprintf(filenameNA, "%s%d%s.txt", base, varyVariable, "na");
+		sprintf(filenameA, "%s%d%s.txt", base, varyVariable, "a");
+		sprintf(filenameFrhoA, "%s%d%s.txt", base, varyVariable, "frhoA");
+		sprintf(filenameFrhoNA, "%s%d%s.txt", base, varyVariable, "frhoNA");
+		sprintf(filenameCorrelationFunction, "%s%d%s.txt", base, varyVariable, "CorrelationFunction");
+		sprintf(filenameCorrelation2, "%s%d%s.txt", base, varyVariable, "Correlation2");
+		sprintf(filenamebandProbabilities, "%s%d%s.txt", base, varyVariable, "BandProbs");
+		sprintf(filenameConcurrence, "%s%d%s.txt", base, varyVariable, "Concurrence");
+
+		fh_output = fopen(filenameNA, "w");
+		fh_output2 = fopen(filenameA, "w");
+		frhoa = fopen(filenameFrhoA, "w");
+		frhona = fopen(filenameFrhoNA, "w");
+		fCorrelationFunc = fopen(filenameCorrelationFunction, "w");
+		fCorrelation2 = fopen(filenameCorrelation2, "w");
+		fBandProbs = fopen(filenamebandProbabilities, "w");
+		fConcurrence = fopen(filenameConcurrence, "w");
+		fdens = fopen("D:\\OneDrive - Tulane University\\RESEARCH\\Quantum transport\\Code\\Plots\\Manifold\\fdens.txt", "w");
+		//fdens = fopen("fdens.txt", "w");
+
+
+
+		//single deviation: centerspin = 0; // psia 
+		//ferromagnetic: centerspin = 1 //psib
+		for (centerspin = 0; centerspin < 1; centerspin++) //Automating the subtraction process
+		{
+			int nsmax = 20;
+			//int nsmax = varyVariable;
+			ns = nsmax; // number of spins
+			n = 1 << nsmax; //matrix dimension, left shifting: a<<b = a*2^b. In this case 1<<ns = 2^ns
+
+
+			////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			double B = 0.0; //magnetic field in z direction
+			//double B = (double)varyVariable/2;
+			double W = 0.0; // disorder strength
+			double J = 0; //NN interaction in x
+			//double J = (double)varyVariable / 20;
+			//double Jlong = 0; //long range in x direction
+			double Jlong = 0;// (double)varyVariable / 30;
+			//double Jz = (double)varyVariable / 10; //NN interaction in z
+			double Jz = 1;// 1.0;
+			double alpha = 20.0; //short range interaction in x
+			double alphalong = 0.0; //long range interaction in x
+			//double alphalong = (double)varyVariable/10;
+			////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			//superposition state parametrization
+			//double epsilon = (double)varyVariable / 100;
+			double epsilon = 0.01;
+			double thetaa = pi_value / 2;
+			double thetab = 0;// pi_value;// / 2 + epsilon;
+			double phia = 0;
+			double phib = 0;
+
+			////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			double sumV, sumVlong, sign, sum, dt;
+			////h = B+W = Magnetic field + random disorder
+			double Hexpect, Hexpectnew, h[100];
+			double bandProbability = 0.0;
+
+
+			srand(time(NULL));
+			//generates sequence of random numbers and stores them in the array `h`, where each number is calculated as `B + W` times a random value within the range [-0.5, 0.5].
+			for (k = 0; k < ns; k++)
+			{
+				h[k] = B + W * (rand() / RAND_MAX - 0.5);
+				//printf("h[k] = %lf", h[k]);
+			}
+
+
+
+			for (ns = nsmax; ns <= nsmax; ns += 2) {  //loop over number of spins
+
+				int maxflips = 2;
+				int ncutstates = 0;
+				for (i = 0; i <= maxflips; i++) ncutstates += choose(ns, i);
+				n = ncutstates;
+				int nentries = ncutstates + ncutstates * ns - choose(ns, maxflips) * (ns - maxflips);
+				nham = nentries;
+				printf("nentries %d nstates %d\n", nentries, ncutstates);
+
+
+				//n = 1 << ns; //matrix dimension
+				//nham = 2 * ns * n;   // number of nonzero entries in Hamiltonian
+
+				//if (alpha<1) J=J*pow(ns,alpha-1); // asymptotic Kac prescription
+				sumV = 0; // rescale J using exact Kac prescription 
+				for (k = 0; k < ns; k++) for (kp = 0; kp < k; kp++)
+					sumV += 1 / pow(k - kp, alpha);
+				//J = J * ns / sumV;
+				printf("Kac J %lf %lf \n", J, J * pow(ns, 1 - alpha));
+
+
+				sumVlong = 0; // rescale Jlong using exact Kac prescription 
+				for (k = 0; k < ns; k++) for (kp = 0; kp < k; kp++)
+					sumVlong += 1 / pow(k - kp, alphalong);
+				Jlong = Jlong * ns / sumVlong;
+				//Jlong = 1;
+				//check
+				double sumVlongcheck = sumVlong;
+				printf("Kac Jlong %lf %lf %lf \n", sumVlongcheck, Jlong, Jlong * pow(ns, 1 - alphalong));
+
+
+				/*
+				if (!dyn) {
+					ham = ARR_D(n * n); //full hamiltonian matrix , not needed if dynamics is done with ham2 (nonzero entries only)
+					eval = ARR_D(n);
+					lwork = 34 * n;
+					work = ARR_D(lwork);
+					ov = ARR_DC(n);
+					for (i = 0; i < n * n; i++) ham[i] = 0.0;
+				}
+				*/
+
+				if (dyn) {
+					t1 = ARR_DC(n); t2 = ARR_DC(n); t3 = ARR_DC(n);
+					k1 = ARR_DC(n); k2 = ARR_DC(n); k3 = ARR_DC(n); k4 = ARR_DC(n);
+				}
+
+				dens = ARR_D(n); mxsave = ARR_I(n); probSpinFlip0 = ARR_D(n); probSpinFlip1 = ARR_D(n); crossCorrelation = ARR_D(n); Correlation2 = ARR_D(n); Concurrence = ARR_D(n);
+				rho11a = ARR_D(n); rho12ra = ARR_D(n); rho12ia = ARR_D(n);
+				rho11na = ARR_D(n); rho12rna = ARR_D(n); rho12ina = ARR_D(n);
+
+
+				//nham = 2 * ns * n+n;   // number of nonzero entries in Hamiltonian
+				ham2 = ARR_D(nham); hind1 = ARR_I(nham); hind2 = ARR_I(nham);  //ham2 stores nonzero entrries only 
+				list1 = ARR_I(ns);
+				list2 = ARR_I(ns);
+				psi = ARR_DC(n); psit = ARR_DC(n); psitdt = ARR_DC(n); //
+				ts = ARR_D(1000000); ds = ARR_D(1000000); d2s = ARR_D(1000000);//was   20000 before
+				ds0 = ARR_D(1000000); ds2 = ARR_D(1000000);
+				nham = 0;
+
+
+				//for (i = 0; i < ns; i++) list1[i] = 1;
+				//if (flip) list1[(ns-1)/2]=0;
+				//if (flip == 1) list1[0] = 0;   // flip leftmost spin
+				//if (flip == -1) list1[(ns - 1) / 2] = 0; //flip center spin?
+				//initb = ind(list1);
+
+				//for (i = 0; i < n; i++) psi[i].r = psi[i].i = 0.;
+				//for (i = 0; i < ns; i++) list1[i] = 1;
+				//list1[2] = centerspin;
+				////list1[(ns - 1)/2] = centerspin;/////////////////////////////////////////////////////////////////////////////////////////////////////center spin
+				////printf("centerspin in code %d\n", centerspin);
+				//initb = ind(list1);
+				//psi[initb].r = 1;    // initialize psi, central spin left
+				////for(i=0;i<n;i++) printf("%lf %lf\n",psi[i].r,psi[i].i);
+
+				//change variables from a to b on the second run
+				if (centerspin == 1)
+				{
+					thetaa = thetab;
+					phia = phib;
+				}
+
+				for (i = 0; i < n; i++) psi[i].r = psi[i].i = 0.;
+				// set up list1 corresponding to basis state psi1
+				for (i = 0; i < ns; i++) list1[i] = 1;
+
+				int perturbedSite = 1; //perturbation on site 2
+
+				//psi1
+				list1[perturbedSite] = 0; //perturbation on site 2 //not a full spin flip
+				initb1 = cutind(list1);
+				//real part of psi
+				psi[initb1].r = cos(thetaa / 2);
+
+				//psi2
+				// set up list2 corresponding to basis state psi2
+				list1[perturbedSite] = 1; // reverting site 2 perturbation
+				//list1[nsmax-2] = 0; // perturbation on site ns-1
+				//list1[varyVariable-1] = 0; // perturbation on site varyVariable
+				list1[17] = 0; // perturbation on site 3
+				initb2 = cutind(list1);
+				psi[initb2].r += cos(phia) * sin(thetaa / 2);
+				psi[initb2].i = sin(phia) * sin(thetaa / 2);
+
+
+				//list1[3] = 1; // revert site 4 perturbation
+
+				for (i = 0; i < n; i++) {  // calculate total x spin Mx for each basis state
+					cutspins(i, list1);
+					mx = 0;
+					for (k = 0; k < ns; k++) mx += list1[k] * 2 - 1;
+					mxsave[i] = mx;
+				}
+
+				/* 				for (i = 0; i < n; i++) {
+									spins(i, list1); // list of spins for basis state i
+									spins(i, list2);
+									for (k = 0; k < ns; k++) {
+										list2[k] = 1 - list2[k]; //flip kth spin
+										j = ind(list2);
+										//if (!dyn) ham[i * n + j] = B;
+										ham2[nham] = h[k]; hind1[nham] = i; hind2[nham] = j; nham++;
+										list2[k] = 1 - list2[k];
+									} */
+
+
+
+				for (i = 0; i < ncutstates; i++) {//if ((mxsave[i] - (ns - 2)) % 4 == 0) {
+					cutspins(i, list1);
+					cutspins(i, list2);
+
+					//QQ
+					if (0)
+						for (k = 0; k < ns; k++) {
+							list2[k] = 1 - list2[k]; //flip kth spin
+							j = cutind(list2);
+							//if (!dyn) ham[i * n + j] = B;
+							ham2[nham] = h[k]; hind1[nham] = i; hind2[nham] = j; nham++;
+							list2[k] = 1 - list2[k];
+						}
+
+					
+					//for (k = 0; k < ns; k++) {/////////////////////////////////////////////////////////////////////////////////////////////PBC
+					for (k = 0; k < ns - 1; k++) {////////////////////////////////////////////////////////////////////////////////////////OBC
+
+						//Calculate the index of the next spin with periodic boundary conditions
+						//int next_spin_index = (k + 1) % (ns);/////////////////////////////////////////////////////////////////////////////PBC
+						int next_spin_index = k + 1;////////////////////////////////////////////////////////////////////////////////////OBC
+
+						// Flip the spins at indices k and next_spin_index
+						list2[k] = 1 - list2[k];
+						list2[next_spin_index] = 1 - list2[next_spin_index];
+
+						// Calculate the indices for the Hamiltonian
+						int j = cutind(list2);
+
+						// Update the Hamiltonian
+						if (j < ncutstates) {
+							ham2[nham] = Jz;
+							hind1[nham] = i;
+							hind2[nham] = j;
+							nham++;
+						}
+
+						// Restore the original spin configuration
+						list2[k] = 1 - list2[k];
+						list2[next_spin_index] = 1 - list2[next_spin_index];
+					}
+
+					/*
+					for (int k = 0; k < ns - 1; k++) {
+
+						// Select only the region between sites 3 and 36
+						if (k < 3 || k > 36)
+							continue;
+
+						// Compute next spin (OBC)
+						int next_spin_index = k + 1;
+
+						// Decide Jz based on position
+						double Jz_here;
+
+						if (k >= 16 && k <= 22) {
+							// Middle region: small Jz
+							Jz_here = 0.1;
+						}
+						else {
+							// Regions 3–17 and 20–36: large Jz
+							Jz_here = 100;
+						}
+
+						// Flip spins
+						list2[k] = 1 - list2[k];
+						list2[next_spin_index] = 1 - list2[next_spin_index];
+
+						// Hamiltonian indices
+						int j = cutind(list2);
+
+						if (j < ncutstates) {
+							ham2[nham] = Jz_here;
+							hind1[nham] = i;
+							hind2[nham] = j;
+							nham++;
+						}
+
+						// Undo flips
+						list2[k] = 1 - list2[k];
+						list2[next_spin_index] = 1 - list2[next_spin_index];
+					}
+					*/
+
+					sumV = 0.0;
+					for (k = 0; k < ns; k++) for (kp = 0; kp < k; kp++) {
+						dist = k - kp;/////////////////////////////////////////////////////////////////////////////////////////////OBC
+						//dist = MIN(k - kp, ns + kp - k); ///////////////////////////////////////////////////////////////////////////////////////PBC
+						if (abs(k - kp) == 1)/////////////////////////////////////////////////////////////////////////////////////// |n-m|=1 NN coupling only, OBC
+						//if ((k - kp) == 1 || abs(k - kp) == ns - 1)//////////////////////////////////////////////////////////////////////////// Boundary condition: NN only, PBC
+						{
+							//printf("%s %d %s %d\n","n=", k, "m=", kp);
+							if (list1[k] == list1[kp]) sign = 1; else sign = -1;
+							sumV += sign * J / pow(dist, alpha);
+							//if (per && kp == 0 && k == ns - 1) sumV += sign * J;	////
+						}
+
+					}
+
+
+					sumVlong = 0.0;
+					for (k = 0; k < ns; k++) for (kp = 0; kp < k; kp++) {
+						dist = k - kp;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////OBC
+						//dist = MIN(k - kp, ns + kp - k); /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////PBC
+						//{
+							//printf("%s %d %s %d\n","n=", k, "m=", kp);
+						/*
+						if (list1[k] == 0 && list1[kp] == 0) {
+							sumVlong -= 4 * Jlong / pow(dist, alphalong); // Include coefficient of 4, tried 3 as well
+							//continue;
+						}*/
+						if (list1[k] == list1[kp]) sign = 1; else sign = -1;
+						sumVlong += sign * Jlong / pow(dist, alphalong);
+						//printf("sumVlong = %.5e\n", sumVlong);  // prints in scientific notation with 5 decimal places
+						//}
+					}
+					//if (!dyn) ham[i * n + i] = sumV;
+					if (i == initb1) printf("Q %lf\n", sumV);
+
+
+					ham2[nham] = sumV + sumVlong; hind1[nham] = i; hind2[nham] = i; nham++;
+				}
+
+				//exit(0);
+
+				//printf("nham %d\n", nham);  //nonzero entries in Hamiltonian
+				//for(i=0;i<nham;i++) printf("ham %d %d %lf\n",hind1[i],hind2[i],ham2[i]);
+				//return 0;
+
+				//for (i=0;i<n;i++) for (j=0;j<n;j++) printf("ham %d %d %lf\n",i,j,ham[i*n+j]);
+
+				/*for (i = 0; i < n; i++) psi[i].r = psi[i].i = 0.;
+				for (i = 0; i < ns; i++) list1[i] = 1;
+				list1[(ns - 1) / 2] = 0;
+				initb = ind(list1);*/
+
+				/* 				for (i = 0; i < n; i++) {  // calculate total x spin Mx for each basis state
+									spins(i, list1);
+									mx = 0;
+									for (k = 0; k < ns; k++) mx += list1[k] * 2 - 1;
+									mxsave[i] = mx;
+								} */
+
+				if (0) for (i = 0; i < n; i++) for (j = 0; j < n; j++) //for testing purposes
+					if (i != j && (mxsave[i] < ns - 4 || mxsave[j] < ns - 4)) ham[i * n + j] = 0;
+
+				/*
+				if (!dyn) { //diagonalize if needed
+					dsyev_("V", "U", &n, ham, &n, eval, work, &lwork, &info); //diagonalize ham, on output contains eigenstates
+					printf("info %d %lf\n", info, work[0] / n);
+				}
+
+				*/
+				//for (i=0;i<n;i++) printf("%lf\n",eval[i]); //eigenvalues
+
+
+
+				/*
+				if (!dyn) for (i = 0; i < n; i++) {
+					ov[i].r = ov[i].i = 0.0; // overlap of initial state with i-th eigenstate
+					for (j = 0; j < n; j++) ov[i].r += psi[j].r * ham[i * n + j]; //here psi and eigenstates are real
+					//printf("%d %lf\n",i,ov[i].r);
+				}*/
+
+				/*e0=ham[initb*n+initb]; //testing only
+				for(i=0;i<n;i++) {
+					 rem=ham[initb*n+i];
+					 if (i!=initb && fabs(rem)>1e-11) {
+						 printf("%d %lf %lf\n",i,rem,ham[i*n+i]-e0);
+						 spins(i,list1);
+						 for (k=0;k<ns;k++) printf("%d ",list1[k]*2-1); printf("\n");
+					 }
+				 }
+				 return 0;*/
+
+				Hpsi2(psi, psit);
+				pr = 0.; for (i = 0; i < n; i++) pr += psi[i].r * psit[i].r + psi[i].i * psit[i].i;
+				Hexpect = pr;
+				printf("H expect initial %lf\n", Hexpect); //expectation value of energy in initial state
+
+
+				//survf = fopen("surv.out", "w");
+
+				it = 0;
+				dt = 0.00001;  //time step
+				// copy initial state once
+				for (i = 0; i < n; i++) psit[i] = psi[i];  // psi at time 0
+
+				// INIT diagnostic (run once, immediately after copying)
+				/*{
+					double psit_norm = 0.0;
+					int dim = (int)n;
+					for (int ii = 0; ii < dim; ii++)
+						psit_norm += psit[ii].r * psit[ii].r + psit[ii].i * psit[ii].i;
+					printf("INIT CHECK: dim=%d ns=%d psit_norm=%.12e\n", dim, ns, psit_norm);
+					int printN = MIN(dim, 8);
+					printf("INIT CHECK: first %d amplitudes:", printN);
+					for (int ii = 0; ii < printN; ii++) printf(" (% .6e,% .6e)", psit[ii].r, psit[ii].i);
+					printf("\n");
+				}*/
+
+				for (t = 0; t < 2.01; t += dt) { // start time loop//////////////////////////////////////////////////////////////////////////time
+
+					/*
+					if (dyn == 0) for (j = 0; j < n; j++) {  //sum over basis states if using diagonalization method
+						psit[j].r = psit[j].i = 0.0;
+						for (i = 0; i < n; i++) { //sum over eigenstates
+							psit[j].r += ov[i].r * cos(eval[i] * t) * ham[i * n + j];
+							psit[j].i -= ov[i].r * sin(eval[i] * t) * ham[i * n + j];
+						}
+					}
+					/*
+					*
+					/*printf("t %lf psi ",t);
+					for (i=0;i<n;i++) printf("%lf +i %lf ,",psit[i].r,psit[i].i);
+					printf("\n");*/
+
+					// check normalization
+					pr = 0;
+					for (i = 0; i < n; i++) pr += pow(psit[i].r, 2) + pow(psit[i].i, 2);
+					//printf("norm %lf %lf %lg\n", t, pr, 1 - pr);
+					savenorm = pr;
+
+					//H|psi(t)>
+					Hpsi2(psit, psitdt);
+					pr = 0.; for (i = 0; i < n; i++) pr += psitdt[i].r * psit[i].r + psitdt[i].i * psit[i].i;
+					Hexpectnew = pr;
+					//printf("H expect %lf %lf %lf\n", t, Hexpect, Hexpectnew); //expectation value of energy at time t compared with initial
+
+					for (k = 0; k < ns; k++) {
+						crossCorrelation[k] = 0.0;
+						Correlation2[k] = 0.0;
+						Concurrence[k] = 0.0;
+					}
+
+					// now let's calculate spin densities at time t
+					//if (fabs(t * 1000 - round(t * 1000)) < 0.0001) {
+					if(1){
+						for (k = 0; k < ns; k++)
+						{
+							dens[k] = 0.; //initialize densities to 0
+
+							if (centerspin == 0)
+							{
+								probSpinFlip0[k] = 0.;
+								rho11na[k] = rho12rna[k] = rho12ina[k] = 0.;
+							}
+							else
+							{
+								probSpinFlip1[k] = 0.;
+								rho11a[k] = rho12ra[k] = rho12ia[k] = 0.;
+							}
+						}
+
+
+						for (i = 0; i < n; i++) { //loop over basis states |b>, ex: |11>, |10>, |01>, |00>
+							pr = pow(psit[i].r, 2) + pow(psit[i].i, 2); // prob to be in that basis state |<psi|b>|^2
+
+							if (0) if (pr > 1e-6) {
+								cutspins(i, list1);
+								for (j = 0; j < ns; j++) printf("%d ", list1[j]); printf(": %lf\n", pr);
+							}
+
+							/*
+							Band Test
+							if (is_in_band(i, ns)) {
+								printf("Basis state %d is in the band\n", i);
+							}
+							else {
+								printf("Basis state %d is not in the band\n", i);
+							}
+
+
+							}*/
+
+							//if (is_in_band(i, ns)) {
+							if (mxsave[i] == ns - 2) {
+								// Sum the probability to be in the band
+								bandProbability += pr;
+							}
+
+
+							cutspins(i, list1); // get list of spins
+
+							// sigma_p for the perturbed site 
+							int sigma_p;
+							if (list1[perturbedSite] == 1)
+								sigma_p = +1;
+							else
+								sigma_p = -1;
+
+
+							for (k = 0; k < ns; k++) { //iterates over spins in the list.
+								//In Cij, fix i=perturbed site, if k==perturbed site
+								// inside the loop over basis states, for each spin k:
+								//if (list1[k] == list1[perturbedSite])
+								//	crossCorrelation[k] += pr;   // accumulates <sigma_k sigma_p>
+								//else
+								//	crossCorrelation[k] -= pr;
+
+								/* ====== CORRELATION FUNCTIONS GO HERE ====== */
+	
+								int sigma_k;
+								if (list1[k] == 1)
+									sigma_k = +1;
+								else
+									sigma_k = -1;
+								Correlation2[k] += pr * sigma_k;
+								crossCorrelation[k] += pr * sigma_k * sigma_p;
+								/* ============================================ */
+
+								
+								if (list1[k])// if spin is 1
+								{
+
+									dens[k] += pr; //dens doesn't have a/na suffix since I'm checking dens for one initial state at a time
+									//rho11[k] += pr;
+									list1[k] = 1 - list1[k];//pauli x flips 
+									j = cutind(list1);
+									list1[k] = 1 - list1[k];//flipping it back
+									//rho12r[k] += psit[i].r * psit[j].r + psit[i].i * psit[j].i;
+									//rho12i[k] += psit[i].i * psit[j].r - psit[i].r * psit[j].i;
+									if (centerspin == 0) //i.e spins are not aligned
+									{
+										dens[k] += pr;
+										//probSpinFlip0[k] += pr;
+										rho11na[k] += pr;
+										if (j < ncutstates) rho12rna[k] += psit[i].r * psit[j].r + psit[i].i * psit[j].i;
+										if (j < ncutstates) rho12ina[k] += psit[i].i * psit[j].r - psit[i].r * psit[j].i;
+									}
+									else //spins are aligned
+									{
+										dens[k] += pr;
+										//probSpinFlip1[k] += pr;
+										rho11a[k] += pr;
+										if (j < ncutstates) rho12ra[k] += psit[i].r * psit[j].r + psit[i].i * psit[j].i;
+										if (j < ncutstates) rho12ia[k] += psit[i].i * psit[j].r - psit[i].r * psit[j].i;
+									}
+								}
+								else
+								{
+									////printf("%s", "false");
+									////probSpinFlip[k] += pr;
+									//if (centerspin == 0)
+									//{
+									//	probSpinFlip0[k] += pr;
+									//	dens[k] -= pr;
+									//	rho11na[k] += pr; // takes the same value that probSpinFlip0 does
+									//	//rho11na[k] = probSpinFlip0[k];
+									//	rho12rna[k] += psit[i].r * psit[j].r + psit[i].i * psit[j].i;
+									//	rho12ina[k] += psit[i].i * psit[j].r - psit[i].r * psit[j].i;
+									//	
+									//}
+									//else
+									//{
+									//	probSpinFlip1[k] += pr;
+									//	dens[k] -= pr;
+									//	rho11a[k] += pr; //rho11a = probSpinFlip1
+									//	//rho11a[k] = probSpinFlip1[k];
+									//	rho12ra[k] += psit[i].r * psit[j].r + psit[i].i * psit[j].i;
+									//	rho12ia[k] += psit[i].i * psit[j].r - psit[i].r * psit[j].i;
+									//	
+									//}
+									////dens[k] -= pr;
+									////rho11[k] -= pr;
+								}
+							}
+						}
+						if (it % 1000 == 0) {
+							for (k = 0; k < ns; k++) {
+
+								if (k == perturbedSite) {
+									Concurrence[k] = 0.0;   // no self-entanglement
+									continue;
+								}
+								complex rho[4][4];
+								/*
+								double psit_norm = 0.0;
+								int dim = (int)n;
+								for (int ii = 0; ii < dim; ii++) psit_norm += psit[ii].r * psit[ii].r + psit[ii].i * psit[ii].i;
+								printf("DEBUG: t=%g dim=%d ns=%d psit_norm=%.12e\n", t, dim, ns, psit_norm);
+								if (psit_norm < 1e-15) {
+									printf("WARNING: psit appears (near) zero at t=%g — skipping concurrence\n", t);
+								}
+								else {
+									int printN = MIN(dim, 8);
+									printf("DEBUG: first %d amplitudes:", printN);
+									for (int ii = 0; ii < printN; ii++) printf(" (% .6e,% .6e)", psit[ii].r, psit[ii].i);
+									printf("\n");
+								}*/
+								compute_rho_pj(rho, psit, ns, perturbedSite, k);
+
+
+								////checking trace
+								//double tr = 0.0;
+								//for (int a = 0; a < 4; a++)
+								//	tr += rho[a][a].r;
+								//printf("t=%g, p=%d, j=%d, trace(rho) = %.12f\n", t, perturbedSite, k, tr);
+
+								Concurrence[k] = compute_concurrence(rho);
+							}
+						}
+						double avg_sigma_p = Correlation2[perturbedSite];
+
+						for (k = 0; k < ns; k++) {
+
+							//redefining since I want to overload crossCorrelation variable
+							double avg_sigma_k = Correlation2[k];
+							double two_point = crossCorrelation[k];
+
+							/* Connected correlator C(k,p) */
+							crossCorrelation[k] = two_point - avg_sigma_k * avg_sigma_p;
+						}
+					}
+
+
+
+					if (1) {   //print out densities
+						//printf("%lf", t);
+						//for (k = 0; k < ns; k++) printf(" %lf", dens[k]);
+						//printf("\n");
+						//printf("Kac J %lf %lf \n", J, J * pow(ns, 1 - alpha));
+						//printf("Kac Jlong %lf %lf %lf \n", sumVlongcheck, Jlong, Jlong * pow(ns, 1 - alphalong));
+					}
+
+					if (0 && it == 2351) {  //testing only
+						for (mx = ns; mx >= -ns; mx -= 2) {
+							d0 = 0;
+							for (i = 0; i < n; i++) if (mxsave[i] == mx) d0 += pow(psit[i].r, 2) + pow(psit[i].i, 2);
+							printf("2351 mx %d %lf\n", mx, d0);
+						}
+					}
+
+					//what happens here
+					rem = pow(psit[initb1].r, 2) + pow(psit[initb1].i, 2); //prob to be in initial basis state
+					//printf("rem %lf\n",rem);
+					d0 = d1 = d2 = d3 = d5 = 0;
+					for (i = 0; i < n; i++) {
+						p = pow(psit[i].r, 2) + pow(psit[i].i, 2);
+						if (mxsave[i] == ns) d0 += p;  //prob for all spins right
+						else if (mxsave[i] == ns - 2) d1 += p;  //prob for one spin left (same as initial state)
+						else if (mxsave[i] == ns - 4) d2 += p;  //prob for two spins left (same as initial state)
+						else if (mxsave[i] == ns - 6) d3 += p;
+						else if (mxsave[i] == ns - 10) d5 += p;
+					}
+
+					// Adjust d1 to subtract the initial basis state probability
+					//d1 -= rem;
+					if (it % 1000 == 0) {
+						// Print the results at the current time step
+						printf("Time: %lf, Prob(d0): %lf, Prob(d1): %lf, Prob(d2): %lf, Prob(d3): %lf, , Prob(d5): %lf\n", t, d0, d1, d2, d3, d5);
+						fprintf(fBandProbs, "%1.2e %0.15f %0.15f %0.15f %0.15f %0.15f \n", t, d1, d0, d2, d3, d5);
+					}
+					//printf("prob %lf %lf %lf %lf %lf %lf %lf\n", t, 1 - rem, d0, d1, d2, d3, 1 - rem - d0 - d1 - d2 - d3);
+					//fprintf(survf, "%lf %lf %lf %lf %lf %lf %lf %lf\n", t, 1 - rem, d1 + rem, d0, d1, d2, d3, 1 - rem - d0 - d1 - d2 - d3);
+
+
+					//fprintf(survf,"%lf %lf\n",t,1-rem);
+
+					if (dyn == 1) {  //do evolution using runge kutta
+						rk(ham2, psit, psitdt, dt);
+						for (i = 0; i < n; i++) psit[i] = psitdt[i];
+					}
+
+
+					//fprintf(fdens, "%1.2e", t);
+					for (k = 0; k < ns; k++)
+						fprintf(fdens, " %0.15f", dens[k]);
+					fprintf(fdens, "\n");
+
+					////print out densities, should be (1-probspin flip)/2
+					//fprintf(fdens, "%lf ", t);
+					//printf("%lf ", t);
+					//for (k = 0; k < ns; k++) fprintf(fdens, " %20.14lg", dens[k]);
+					//fprintf(fdens, "\n");
+					if (it % 1000 == 0) {
+						//center deviation
+						if (centerspin == 0)
+						{
+							printf("centerspin %d", centerspin);
+							//printf("fBandProbs %15f",bandProbability);
+							printf("\n");
+							fprintf(fh_output, "%1.2e", t);
+							fprintf(frhona, "%1.2e", t);
+							fprintf(fCorrelationFunc, "%1.2e", t);
+							fprintf(fCorrelation2, "%1.2e", t);
+							fprintf(fConcurrence, "%1.2e", t);
+							printf("%1.2f ", t);
+							for (k = 0; k < ns; k++) {
+								fprintf(fh_output, " %0.15f", rho11na[k]);
+								fprintf(fCorrelationFunc, " %0.15f", crossCorrelation[k]);
+								fprintf(fCorrelation2, " %0.15f", Correlation2[k]);
+								fprintf(fConcurrence, " %0.15f", Concurrence[k]);
+								fprintf(frhona, " %0.15f %0.15f %0.15f", rho11na[k], rho12rna[k], rho12ina[k]);
+								//printf(" %0.15f %0.15f %0.15f", rho11na[k], rho12rna[k], rho12ina[k]);
+								//printf("%0.15f", probSpinFlip0[k]);
+							}
+							printf("\n");
+							fprintf(fh_output, "\n");
+							fprintf(frhona, "\n");
+							fprintf(fCorrelationFunc, "\n");
+							fprintf(fCorrelation2, "\n");
+							fprintf(fConcurrence, "\n");
+							//printf("centerspin %d", centerspin);
+							//printf("\n");
+							//printf("\n");
+							//printf("\n");
+							printf("varyVariable %d", varyVariable);
+						}
+
+						//aligned
+						if (centerspin == 1)
+						{
+
+							printf("centerspin %d", centerspin);
+							printf("\n");
+							fprintf(fh_output2, "%1.2e", t);
+							fprintf(frhoa, "%1.2e", t);
+							printf("%1.2e ", t);
+							for (k = 0; k < ns; k++)
+							{
+								//printf("%s", "Code came here!!!!!!!!!!!!!!!!!");
+								printf("\n");
+								fprintf(fh_output2, " %0.15f", rho11a[k]);
+								fprintf(frhoa, " %0.15f %0.15f %0.15f", rho11a[k], rho12ra[k], rho12ia[k]);
+								//printf(" %0.15f %0.15f %0.15f", rho11a[k], rho12ra[k], rho12ia[k]);
+								//printf(" %0.15f", probSpinFlip1[k]);
+							}
+							printf("\n");
+							fprintf(fh_output2, "\n");
+							fprintf(frhoa, "\n");
+
+							//printf("\n");
+							//printf("\n");
+							//printf("\n");
+							printf("varyVariable %d", varyVariable);
+
+							//printf("centerspin %d", centerspin);						
+						}
+					}
+					//printf("%s", "Code came here!!!!!!!!!!!!!!!!!");
+					ts[it] = t;                 // Save the current time
+					ds[it] = 1 - rem;           // Save the probability of not being in the initial state
+					d2s[it] = 1 - (d1 + rem);   // Save probability of not being in band d1 or the initial state
+					it++;                       // Increment the time step counter
+					ds0[it] = d0;               // Save the probability of being in band d0 (all spins up)
+					ds2[it] = d2;               // Save the probability of being in band d2 (two spins flipped)
+				}
+
+				data = fopen("shieldrks.check", "a");
+				fprintf(data, "%d %lf %lf %lf\n", ns, dt, savenorm, Hexpectnew / Hexpect);
+				fclose(data);
+
+				//printf("analyze  ");
+				//analyzetime(ts,ds,it);
+				//printf("d2  ");
+				analyzetime(ts, d2s, it);
+
+			}
+			fprintf(energy, "%0.15f\n", Hexpect);
+			//printf("normalization to check for convergence %lf %e\n", t, 1 - savenorm);
+			//printf("Kac Jlong %lf %lf %lf \n", sumVlongcheck, Jlong, Jlong * pow(ns, 1 - alphalong));
+			//close the file
+			// 
+			//Free all dynamically allocated variables before starting the next loop
+			/*if (dyn) {	free(t1); free(t2);	free(t3); free(k1); free(k2);	free(k3);	free(k4);}
+
+			free(dens);	free(mxsave); free(probSpinFlip0); free(probSpinFlip1);
+			free(rho11); free(rho12r); free(rho12i); free(ham2); free(hind1);
+			free(hind2); free(list1); free(list2); free(psi);
+			free(psit); free(psitdt); free(ts); free(ds); free(d2s); free(ds0);
+			free(ds2);*/
+		}//loop over hamiltonian variables
+
+
+		fclose(fh_output);
+		fclose(fdens);
+		fclose(frhoa);
+		fclose(frhona);
+		fclose(fh_output2);
+		fclose(fCorrelationFunc);
+		fclose(fCorrelation2);
+		fclose(fConcurrence);
+	}
+
+	fclose(energy);
+	return 0;
+}
+
+
+int ind(int* list)   // find basis element conrresponding to spin chain "list"
+{
+	int i, j = 0;
+	for (i = 0; i < ns; i++)
+		j += list[i] * pow(2, i);
+	return j;
+}
+
+void spins(int index, int* s) // convert spin chain "s" to integer basis element index
+
+{
+	int i;
+	for (i = 0; i < ns; i++)
+		s[i] = (1 << i & index) > 0;
+	return;
+}
+
+void analyzetime(double* ts, double* ds, int nt)  //analyze survival probabilities over time
+{
+	double dmax, tmax, t90, davg;
+	int navg;
+	int it;
+	FILE* data;
+	dmax = tmax = t90 = 0;
+	for (it = 0; it < nt; it++)
+		if (ds[it] > dmax) { dmax = ds[it]; tmax = ts[it]; }
+	int found = 0;
+	it = 0;
+	while (!found) {
+		if (ds[it] > 0.9 * dmax) { t90 = ts[it]; found = 1; }
+		it++;
+	}
+	davg = 0; navg = 0;
+	for (it = 0; it < nt; it++)
+		if (ts[it] > 1.0) { davg += ds[it]; navg++; }
+	//if(ts[it]>10.0) {davg+=ds[it]; navg++;}
+	davg /= navg;
+	double q1 = ds[1] / pow(ts[1], 2);
+	double q2 = ds[2] / pow(ts[2], 2);
+	//printf("t90 %lf tmax %lf max prob %lf\n", t90, tmax, dmax);
+	//printf("davg %lf\n", davg);
+	//printf("quad %lf acc %lf\n", q1, q2 / q1);
+	data = fopen("shieldrks.out", "a");
+	fprintf(data, "%d %lf\n", ns, davg);
+	fclose(data);
+}
+
+
+//dense matrix
+void Hpsi(double* ham, doublecomplex* psi, doublecomplex* psi1) { // psi1 = H*psi
+	for (int i = 0; i < n; i++) {
+		psi1[i].r = psi1[i].i = 0.0;
+		for (int j = 0; j < n; j++) {
+			psi1[i].r += ham[i * n + j] * psi[j].r;
+			psi1[i].i += ham[i * n + j] * psi[j].i;
+		}
+	}
+}
+
+//sparse matrix
+void Hpsi2(doublecomplex* psi, doublecomplex* psi1) {  //psi1 = H*psi but using nonzero elements of H (stored in ham2)
+	for (int i = 0; i < n; i++)
+		psi1[i].r = psi1[i].i = 0.0;
+	for (int j = 0; j < nham; j++) if (mxsave[hind1[j]] == mxsave[hind2[j]]) { //Restricted multiplication, conserving total magnetization
+		//printf("which band %d %d\n", mxsave[hind1[j]], mxsave[hind2[j]]);
+		psi1[hind1[j]].r += ham2[j] * psi[hind2[j]].r;
+		psi1[hind1[j]].i += ham2[j] * psi[hind2[j]].i;
+	}
+}
+
+void rk(double* ham, doublecomplex* psi, doublecomplex* psi1, double dt) {  //RK4
+	//doublecomplex t1[n],t2[n],t3[n],k1[n],k2[n],k3[n],k4[n];
+	Hpsi2(psi, psi1); multveci(dt, psi1, k1); addmultvec(psi, 0.5, k1, t1);
+
+	/*printf("psi1 ");
+for (int i=0;i<n;i++) printf("%lf +i %lf ,",psi1[i].r,psi1[i].i);
+printf("\n");
+
+			printf("k11 ");
+for (int i=0;i<n;i++) printf("%lf +i %lf ,",k1[i].r,k1[i].i);
+printf("\n");*/
+
+	Hpsi2(t1, psi1); multveci(dt, psi1, k2); addmultvec(psi, 0.5, k2, t2);
+	Hpsi2(t2, psi1); multveci(dt, psi1, k3); addmultvec(psi, 1.0, k3, t3);
+	Hpsi2(t3, psi1); multveci(dt, psi1, k4);
+	for (int i = 0; i < n; i++) psi1[i].r = psi[i].r + (k1[i].r + 2 * k2[i].r + 2 * k3[i].r + k4[i].r) / 6.0;
+	for (int i = 0; i < n; i++) psi1[i].i = psi[i].i + (k1[i].i + 2 * k2[i].i + 2 * k3[i].i + k4[i].i) / 6.0;
+
+	//addmultvec(psi,1.0,k1,psi1);
+
+		/*		printf("psi1 ");
+		for (int i=0;i<n;i++) printf("%lf +i %lf ,",psi1[i].r,psi1[i].i);
+		printf("\n");*/
+}
+
+void multvec(double fact, doublecomplex* v, doublecomplex* v1) {   // v1 = fact*v
+	for (int i = 0; i < n; i++) {
+		v1[i].r = fact * v[i].r; v1[i].i = fact * v[i].i;
+	}
+}
+
+void multveci(double fact, doublecomplex* v, doublecomplex* v1) {  // v1 = -i fact*v
+	for (int i = 0; i < n; i++) {
+		v1[i].r = fact * v[i].i; v1[i].i = -fact * v[i].r;
+	}
+}
+
+
+void addmultvec(doublecomplex* v0, double fact, doublecomplex* v, doublecomplex* v1) {  // v1 = v0 + fact*v
+	for (int i = 0; i < n; i++) {
+		v1[i].r = v0[i].r + fact * v[i].r; v1[i].i = v0[i].i + fact * v[i].i;
+	}
+}
+
+int is_in_band(int i, int ns) {
+	int count = 0;
+
+	// Loop over each bit (spin) in the basis state i
+	for (int k = 0; k < ns; k++) {
+		if (i & (1 << k)) {  // Check if the k-th spin is up
+			count++;
+		}
+	}
+
+	// Condition: basis state is in the band if exactly 1 spins are up
+	if (count == 2) {
+		return 1;  // Basis state is in the band
+	}
+	else {
+		return 0;  // Basis state is not in the band
+	}
+}
+
+int choose(int n, int k) {
+	long long res = 1;
+	int i;
+	if (k > n) return 0;
+	if (k > n / 2) k = n - k;
+	for (i = n; i > n - k; i--) res *= i;
+	for (i = 1; i <= k; i++) res /= i;
+	i = res;
+	return i;
+}
+
+
+int cutind(int* list)   // find basis element conrresponding to spin chain "list"
+{
+	int i, ind = 0;
+	int left = 0; // how many spins point left (band)
+	int a[100]; //list of all spin left sites
+	for (i = 0; i < ns; i++)
+		if (list[i] == 0) a[left++] = i;
+	ind = 0;
+	for (i = 0; i < left; i++) ind += choose(ns, i);
+	for (i = 0; i < left; i++) ind += choose(a[i], i + 1);
+	return ind;
+}
+
+void cutspins(int ind, int* s) // convert integer basis element ind to spin chain "s" 
+{
+	int i, left, sum;
+	left = 0; // how many spins point left
+	for (i = 0; i < ns; i++) s[i] = 1;
+	while (ind >= choose(ns, left)) { ind -= choose(ns, left); left++; }
+	while (left > 0) {
+		i = left - 1;
+		while (choose(i + 1, left) <= ind) i++;
+		s[i] = 0;
+		ind -= choose(i, left);
+		left--;
+	}
+
+	return;
+}
+
+void compute_rho_pj(complex rho[4][4],
+	doublecomplex* psit,
+	int ns,
+	int p,
+	int j)
+{
+	int dim = (int)n;
+	int num_env = 1 << (ns - 2);
+
+	// ----- allocate psi_env[e][a] in double precision -----
+	doublecomplex** psi_env = malloc(num_env * sizeof(doublecomplex*));
+	for (int e = 0; e < num_env; e++) {
+		psi_env[e] = malloc(4 * sizeof(doublecomplex));
+		for (int a = 0; a < 4; a++) {
+			psi_env[e][a].r = 0.0;
+			psi_env[e][a].i = 0.0;
+		}
+	}
+
+	int* list1 = malloc(ns * sizeof(int));
+
+	// ----- STEP (A): build psi_env[e][a] -----
+	for (int s = 0; s < dim; s++) {
+
+		cutspins(s, list1);   // fills list1[k]
+
+		int sp = list1[p];
+		int sj = list1[j];
+		int aidx = 2 * sp + sj;  // (00,01,10,11) → 0..3
+
+		// build environment index e by packing remaining spins
+		int e = 0;
+		int pos = 0;
+		for (int k = 0; k < ns; k++) {
+			if (k == p || k == j)
+				continue;
+			e |= (list1[k] << pos);
+			pos++;
+		}
+
+		// accumulate psi_env[e][a] += psit[s]  (psit is doubleprecision)
+		psi_env[e][aidx].r += psit[s].r;
+		psi_env[e][aidx].i += psit[s].i;
+	}
+
+	free(list1);
+
+	// ----- STEP (B): build rho_x[a][b] in double precision -----
+	doublecomplex rho_x[4][4];
+	for (int a = 0; a < 4; a++)
+		for (int b = 0; b < 4; b++)
+			rho_x[a][b].r = rho_x[a][b].i = 0.0;
+
+	for (int e = 0; e < num_env; e++) {
+		for (int a = 0; a < 4; a++) {
+			double ar = psi_env[e][a].r;
+			double ai = psi_env[e][a].i;
+			for (int b = 0; b < 4; b++) {
+				double br = psi_env[e][b].r;
+				double bi = psi_env[e][b].i;
+				// psi_env[e][a] * conj(psi_env[e][b])
+				rho_x[a][b].r += (ar * br + ai * bi);
+				rho_x[a][b].i += (ai * br - ar * bi);
+			}
+		}
+	}
+
+	// copy (with conversion) into output rho (single-precision complex)
+	for (int a = 0; a < 4; a++)
+		for (int b = 0; b < 4; b++) {
+			rho[a][b].r = (real)rho_x[a][b].r;
+			rho[a][b].i = (real)rho_x[a][b].i;
+		}
+
+	// free psi_env
+	for (int e = 0; e < num_env; e++) free(psi_env[e]);
+	free(psi_env);
+}
+
+
+void hermitian_eigenvalues_4x4(complex A[4][4], double evals[4])
+{
+	double M[4][4];
+
+	// Convert to real symmetric if A is Hermitian 
+	for (int i = 0; i < 4; i++)
+		for (int j = 0; j < 4; j++) {
+			if (fabs(A[i][j].i) > 1e-10) {
+				printf("Warning: Im(A[i][j]) not zero in hermitian_eigenvalues_4x4\n");
+			}
+			M[i][j] = A[i][j].r;
+		}
+
+	// Jacobi diagonalization
+	for (int iter = 0; iter < 50; iter++) {
+		for (int p = 0; p < 4; p++) {
+			for (int q = p + 1; q < 4; q++) {
+
+				double mpq = M[p][q];
+				if (fabs(mpq) < 1e-12) continue;
+
+				double mpp = M[p][p];
+				double mqq = M[q][q];
+				double phi = 0.5 * atan2(2 * mpq, mqq - mpp);
+				double c = cos(phi);
+				double s = sin(phi);
+
+				// rotate p,q
+				for (int k = 0; k < 4; k++) {
+					double mkp = M[k][p];
+					double mkq = M[k][q];
+					M[k][p] = c * mkp - s * mkq;
+					M[k][q] = s * mkp + c * mkq;
+				}
+
+				for (int k = 0; k < 4; k++) {
+					double mpk = M[p][k];
+					double mqk = M[q][k];
+					M[p][k] = c * mpk - s * mqk;
+					M[q][k] = s * mpk + c * mqk;
+				}
+			}
+		}
+	}
+
+	// eigenvalues = diagonal of M
+	for (int i = 0; i < 4; i++)
+		evals[i] = M[i][i];
+}
+
+double compute_concurrence(complex rho[4][4])
+{
+	// Spin-flip matrix S = sigma_y tensor sigma_y
+	// Using computational basis |00>, |01>, |10>, |11>
+	complex S[4][4] = {
+	{ {0,0}, {0,0}, {0,0}, {-1,0} },
+	{ {0,0}, {0,0}, {1,0}, {0,0} },
+	{ {0,0}, {1,0}, {0,0}, {0,0} },
+	{ {-1,0}, {0,0}, {0,0}, {0,0} }
+	};
+
+	complex rho_conj[4][4];
+	complex temp[4][4];
+	complex rho_tilde[4][4];
+	complex R[4][4];
+
+	// 1. ρ* (complex conjugate)
+	for (int a = 0; a < 4; a++)
+		for (int b = 0; b < 4; b++) {
+			rho_conj[a][b].r = rho[a][b].r;
+			rho_conj[a][b].i = -rho[a][b].i;
+		}
+
+	// 2. temp = ρ* S    (matrix multiply)
+	for (int a = 0; a < 4; a++) {
+		for (int b = 0; b < 4; b++) {
+			temp[a][b].r = temp[a][b].i = 0.0;
+			for (int k = 0; k < 4; k++) {
+				temp[a][b].r += rho_conj[a][k].r * S[k][b].r - rho_conj[a][k].i * S[k][b].i;
+				temp[a][b].i += rho_conj[a][k].r * S[k][b].i + rho_conj[a][k].i * S[k][b].r;
+			}
+		}
+	}
+
+	// 3. ρ_tilde = S temp
+	for (int a = 0; a < 4; a++) {
+		for (int b = 0; b < 4; b++) {
+			rho_tilde[a][b].r = rho_tilde[a][b].i = 0.0;
+			for (int k = 0; k < 4; k++) {
+				rho_tilde[a][b].r += S[a][k].r * temp[k][b].r - S[a][k].i * temp[k][b].i;
+				rho_tilde[a][b].i += S[a][k].r * temp[k][b].i + S[a][k].i * temp[k][b].r;
+			}
+		}
+	}
+
+	// 4. R = ρ ρ_tilde
+	for (int a = 0; a < 4; a++) {
+		for (int b = 0; b < 4; b++) {
+			R[a][b].r = R[a][b].i = 0.0;
+			for (int k = 0; k < 4; k++) {
+				R[a][b].r += rho[a][k].r * rho_tilde[k][b].r - rho[a][k].i * rho_tilde[k][b].i;
+				R[a][b].i += rho[a][k].r * rho_tilde[k][b].i + rho[a][k].i * rho_tilde[k][b].r;
+			}
+		}
+	}
+
+	//4.5 Clean tiny imaginaries in R
+	double eps = 1e-10;
+
+	for (int a = 0; a < 4; a++)
+		for (int b = 0; b < 4; b++) {
+			if (fabs(rho[a][b].i) < eps) rho[a][b].i = 0;
+			if (fabs(R[a][b].i) < eps) R[a][b].i = 0;
+		}
+
+	// 5. Eigenvalues of R (real)
+	double evals[4];
+	hermitian_eigenvalues_4x4(R, evals);
+
+	// 6. Fix tiny negatives and sqrt
+	for (int i = 0; i < 4; i++) {
+		if (evals[i] < 0 && evals[i] > -1e-12) evals[i] = 0;
+		evals[i] = sqrt(evals[i]);
+	}
+
+	// 7. Sort descending
+	for (int i = 0; i < 4; i++)
+		for (int j = i + 1; j < 4; j++)
+			if (evals[j] > evals[i]) {
+				double tmp = evals[i];
+				evals[i] = evals[j];
+				evals[j] = tmp;
+			}
+
+	// 8. Wootters formula
+	double C = evals[0] - evals[1] - evals[2] - evals[3];
+	if (C < 0) C = 0;
+	return C;
+}
