@@ -5,6 +5,7 @@
 #include "f2c.h"
 #include <time.h>
 
+
 #define ARR_D(i) (double *) calloc(i, sizeof(double))
 #define ARR_DC(i) (doublecomplex *) calloc(i, sizeof(doublecomplex))
 #define ARR_I(i) (int *) calloc(i, sizeof(int))
@@ -22,8 +23,8 @@ void multvec(double fact, doublecomplex* v, doublecomplex* v1);
 void multveci(double fact, doublecomplex* v, doublecomplex* v1);
 void addmultvec(doublecomplex* v0, double fact, doublecomplex* v, doublecomplex* v1);
 void compute_rho_pj(complex rho_z[4][4], doublecomplex* psit, int ns, int p, int j);
-double compute_concurrence(complex rho_z[4][4]);
-void hermitian_eigenvalues_4x4(complex A[4][4], double evals[4]);
+//double compute_concurrence(complex rho_z[4][4]);
+//void hermitian_eigenvalues_4x4(complex A[4][4], double evals[4]);
 
 int choose(int n, int k);
 int cutind(int* list);
@@ -57,7 +58,7 @@ int main()
 
 
 
-	double* ham, * eval, * work, t, * dens, * probSpinFlip0, * probSpinFlip1, pr, rem, e0, mx, * crossCorrelation, * Correlation2, *Concurrence;
+	double* ham, * eval, * work, t, * dens, * probSpinFlip0, * probSpinFlip1, pr, rem, e0, mx, * crossCorrelation, * Correlation2, * Concurrence;
 	double* rho11a, * rho12ra, * rho12ia;
 	double* rho11na, * rho12rna, * rho12ina;
 	double d0, d1, d2, d3, d5, p, maxd, maxd2, * ts, * ds, * d2s, * ds0, * ds2, savenorm;
@@ -70,7 +71,8 @@ int main()
 	int dist;
 	int centerspin;
 	int varyVariable;
-	FILE* data, * survf, * fdens, * frhoa, * frhona, * fCorrelationFunc, * fCorrelation2, *fConcurrence;
+	FILE* data, * survf, * fdens, * frhoa, * frhona, * fCorrelationFunc, * fCorrelation2, * fConcurrence;
+
 
 	int dyn = 1; //0 means use diagonalization, 1 means use runge kutta
 	int flip = 0;
@@ -88,7 +90,7 @@ int main()
 
 
 	//Writing to file to another directory
-	for (varyVariable = 3; varyVariable < 4; varyVariable += 1)
+	for (varyVariable = 2; varyVariable < 3; varyVariable += 1)
 	{
 		char filenameNA[256];
 		char filenameA[256];
@@ -139,11 +141,11 @@ int main()
 			double J = 0; //NN interaction in x
 			//double J = (double)varyVariable / 20;
 			//double Jlong = 0; //long range in x direction
-			double Jlong = 0;// (double)varyVariable / 30;
+			double Jlong = 2;// (double)varyVariable / 30;
 			//double Jz = (double)varyVariable / 10; //NN interaction in z
 			double Jz = 1;// 1.0;
 			double alpha = 20.0; //short range interaction in x
-			double alphalong = 0.0; //long range interaction in x
+			double alphalong = 0.5; //long range interaction in x
 			//double alphalong = (double)varyVariable/10;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			//superposition state parametrization
@@ -263,7 +265,7 @@ int main()
 				int perturbedSite = 1; //perturbation on site 2
 
 				//psi1
-				list1[perturbedSite] = 0; //perturbation on site 2 //not a full spin flip
+				list1[perturbedSite] = list1[17] = 0; //perturbation on site 2 //not a full spin flip
 				initb1 = cutind(list1);
 				//real part of psi
 				psi[initb1].r = cos(thetaa / 2);
@@ -273,7 +275,7 @@ int main()
 				list1[perturbedSite] = 1; // reverting site 2 perturbation
 				//list1[nsmax-2] = 0; // perturbation on site ns-1
 				//list1[varyVariable-1] = 0; // perturbation on site varyVariable
-				list1[17] = 0; // perturbation on site 3
+				list1[2] = 0; // perturbation on site 3
 				initb2 = cutind(list1);
 				psi[initb2].r += cos(phia) * sin(thetaa / 2);
 				psi[initb2].i = sin(phia) * sin(thetaa / 2);
@@ -315,7 +317,7 @@ int main()
 							list2[k] = 1 - list2[k];
 						}
 
-					
+
 					//for (k = 0; k < ns; k++) {/////////////////////////////////////////////////////////////////////////////////////////////PBC
 					for (k = 0; k < ns - 1; k++) {////////////////////////////////////////////////////////////////////////////////////////OBC
 
@@ -390,7 +392,7 @@ int main()
 						dist = k - kp;/////////////////////////////////////////////////////////////////////////////////////////////OBC
 						//dist = MIN(k - kp, ns + kp - k); ///////////////////////////////////////////////////////////////////////////////////////PBC
 						if (abs(k - kp) == 1)/////////////////////////////////////////////////////////////////////////////////////// |n-m|=1 NN coupling only, OBC
-						//if ((k - kp) == 1 || abs(k - kp) == ns - 1)//////////////////////////////////////////////////////////////////////////// Boundary condition: NN only, PBC
+							//if ((k - kp) == 1 || abs(k - kp) == ns - 1)//////////////////////////////////////////////////////////////////////////// Boundary condition: NN only, PBC
 						{
 							//printf("%s %d %s %d\n","n=", k, "m=", kp);
 							if (list1[k] == list1[kp]) sign = 1; else sign = -1;
@@ -538,7 +540,7 @@ int main()
 
 					// now let's calculate spin densities at time t
 					//if (fabs(t * 1000 - round(t * 1000)) < 0.0001) {
-					if(1){
+					if (1) {
 						for (k = 0; k < ns; k++)
 						{
 							dens[k] = 0.; //initialize densities to 0
@@ -602,7 +604,7 @@ int main()
 								//	crossCorrelation[k] -= pr;
 
 								/* ====== CORRELATION FUNCTIONS GO HERE ====== */
-	
+
 								int sigma_k;
 								if (list1[k] == 1)
 									sigma_k = +1;
@@ -612,7 +614,7 @@ int main()
 								crossCorrelation[k] += pr * sigma_k * sigma_p;
 								/* ============================================ */
 
-								
+
 								if (list1[k])// if spin is 1
 								{
 
@@ -673,47 +675,37 @@ int main()
 							for (k = 0; k < ns; k++) {
 
 								if (k == perturbedSite) {
-									Concurrence[k] = 0.0;   // no self-entanglement
+									/* skip self-reduced density matrix */
 									continue;
 								}
+
 								complex rho[4][4];
-								/*
-								double psit_norm = 0.0;
-								int dim = (int)n;
-								for (int ii = 0; ii < dim; ii++) psit_norm += psit[ii].r * psit[ii].r + psit[ii].i * psit[ii].i;
-								printf("DEBUG: t=%g dim=%d ns=%d psit_norm=%.12e\n", t, dim, ns, psit_norm);
-								if (psit_norm < 1e-15) {
-									printf("WARNING: psit appears (near) zero at t=%g — skipping concurrence\n", t);
-								}
-								else {
-									int printN = MIN(dim, 8);
-									printf("DEBUG: first %d amplitudes:", printN);
-									for (int ii = 0; ii < printN; ii++) printf(" (% .6e,% .6e)", psit[ii].r, psit[ii].i);
-									printf("\n");
-								}*/
 								compute_rho_pj(rho, psit, ns, perturbedSite, k);
 
+								double tr = 0.0;
+								/* checking trace */
+								/*;
+								for (int a = 0; a < 4; a++) tr += rho[a][a].r;
+								printf("t=%g, p=%d, j=%d, trace(rho) = %.12f\n", t, perturbedSite, k, tr);*/
 
-								////checking trace
-								//double tr = 0.0;
-								//for (int a = 0; a < 4; a++)
-								//	tr += rho[a][a].r;
-								//printf("t=%g, p=%d, j=%d, trace(rho) = %.12f\n", t, perturbedSite, k, tr);
-
-								Concurrence[k] = compute_concurrence(rho);
+								/* Write reduced 2-spin density matrix into fConcurrence:
+								   Format per line:
+								   time perturbedSite j trace  (for a=0..3, b=0..3) Re(rho[a][b]) Im(rho[a][b])
+								*/
+								if (fConcurrence) {
+									fprintf(fConcurrence, "%1.15e %d %d %0.15f", t, perturbedSite, k, tr);
+									for (int a = 0; a < 4; ++a) {
+										for (int b = 0; b < 4; ++b) {
+											fprintf(fConcurrence, " % .15e % .15e", (double)rho[a][b].r, (double)rho[a][b].i);
+										}
+									}
+									fprintf(fConcurrence, "\n");
+								}
 							}
+							/* ensure partial results are flushed during long runs */
+							if (fConcurrence) fflush(fConcurrence);
 						}
-						double avg_sigma_p = Correlation2[perturbedSite];
-
-						for (k = 0; k < ns; k++) {
-
-							//redefining since I want to overload crossCorrelation variable
-							double avg_sigma_k = Correlation2[k];
-							double two_point = crossCorrelation[k];
-
-							/* Connected correlator C(k,p) */
-							crossCorrelation[k] = two_point - avg_sigma_k * avg_sigma_p;
-						}
+					
 					}
 
 
@@ -787,13 +779,13 @@ int main()
 							fprintf(frhona, "%1.2e", t);
 							fprintf(fCorrelationFunc, "%1.2e", t);
 							fprintf(fCorrelation2, "%1.2e", t);
-							fprintf(fConcurrence, "%1.2e", t);
+							//fprintf(fConcurrence, "%1.2e", t);
 							printf("%1.2f ", t);
 							for (k = 0; k < ns; k++) {
 								fprintf(fh_output, " %0.15f", rho11na[k]);
 								fprintf(fCorrelationFunc, " %0.15f", crossCorrelation[k]);
 								fprintf(fCorrelation2, " %0.15f", Correlation2[k]);
-								fprintf(fConcurrence, " %0.15f", Concurrence[k]);
+								//fprintf(fConcurrence, " %0.15f", Concurrence[k]);
 								fprintf(frhona, " %0.15f %0.15f %0.15f", rho11na[k], rho12rna[k], rho12ina[k]);
 								//printf(" %0.15f %0.15f %0.15f", rho11na[k], rho12rna[k], rho12ina[k]);
 								//printf("%0.15f", probSpinFlip0[k]);
@@ -803,7 +795,7 @@ int main()
 							fprintf(frhona, "\n");
 							fprintf(fCorrelationFunc, "\n");
 							fprintf(fCorrelation2, "\n");
-							fprintf(fConcurrence, "\n");
+							//fprintf(fConcurrence, "\n");
 							//printf("centerspin %d", centerspin);
 							//printf("\n");
 							//printf("\n");
@@ -1146,142 +1138,3 @@ void compute_rho_pj(complex rho[4][4],
 }
 
 
-void hermitian_eigenvalues_4x4(complex A[4][4], double evals[4])
-{
-	double M[4][4];
-
-	// Convert to real symmetric if A is Hermitian 
-	for (int i = 0; i < 4; i++)
-		for (int j = 0; j < 4; j++) {
-			if (fabs(A[i][j].i) > 1e-10) {
-				printf("Warning: Im(A[i][j]) not zero in hermitian_eigenvalues_4x4\n");
-			}
-			M[i][j] = A[i][j].r;
-		}
-
-	// Jacobi diagonalization
-	for (int iter = 0; iter < 50; iter++) {
-		for (int p = 0; p < 4; p++) {
-			for (int q = p + 1; q < 4; q++) {
-
-				double mpq = M[p][q];
-				if (fabs(mpq) < 1e-12) continue;
-
-				double mpp = M[p][p];
-				double mqq = M[q][q];
-				double phi = 0.5 * atan2(2 * mpq, mqq - mpp);
-				double c = cos(phi);
-				double s = sin(phi);
-
-				// rotate p,q
-				for (int k = 0; k < 4; k++) {
-					double mkp = M[k][p];
-					double mkq = M[k][q];
-					M[k][p] = c * mkp - s * mkq;
-					M[k][q] = s * mkp + c * mkq;
-				}
-
-				for (int k = 0; k < 4; k++) {
-					double mpk = M[p][k];
-					double mqk = M[q][k];
-					M[p][k] = c * mpk - s * mqk;
-					M[q][k] = s * mpk + c * mqk;
-				}
-			}
-		}
-	}
-
-	// eigenvalues = diagonal of M
-	for (int i = 0; i < 4; i++)
-		evals[i] = M[i][i];
-}
-
-double compute_concurrence(complex rho[4][4])
-{
-	// Spin-flip matrix S = sigma_y tensor sigma_y
-	// Using computational basis |00>, |01>, |10>, |11>
-	complex S[4][4] = {
-	{ {0,0}, {0,0}, {0,0}, {-1,0} },
-	{ {0,0}, {0,0}, {1,0}, {0,0} },
-	{ {0,0}, {1,0}, {0,0}, {0,0} },
-	{ {-1,0}, {0,0}, {0,0}, {0,0} }
-	};
-
-	complex rho_conj[4][4];
-	complex temp[4][4];
-	complex rho_tilde[4][4];
-	complex R[4][4];
-
-	// 1. ρ* (complex conjugate)
-	for (int a = 0; a < 4; a++)
-		for (int b = 0; b < 4; b++) {
-			rho_conj[a][b].r = rho[a][b].r;
-			rho_conj[a][b].i = -rho[a][b].i;
-		}
-
-	// 2. temp = ρ* S    (matrix multiply)
-	for (int a = 0; a < 4; a++) {
-		for (int b = 0; b < 4; b++) {
-			temp[a][b].r = temp[a][b].i = 0.0;
-			for (int k = 0; k < 4; k++) {
-				temp[a][b].r += rho_conj[a][k].r * S[k][b].r - rho_conj[a][k].i * S[k][b].i;
-				temp[a][b].i += rho_conj[a][k].r * S[k][b].i + rho_conj[a][k].i * S[k][b].r;
-			}
-		}
-	}
-
-	// 3. ρ_tilde = S temp
-	for (int a = 0; a < 4; a++) {
-		for (int b = 0; b < 4; b++) {
-			rho_tilde[a][b].r = rho_tilde[a][b].i = 0.0;
-			for (int k = 0; k < 4; k++) {
-				rho_tilde[a][b].r += S[a][k].r * temp[k][b].r - S[a][k].i * temp[k][b].i;
-				rho_tilde[a][b].i += S[a][k].r * temp[k][b].i + S[a][k].i * temp[k][b].r;
-			}
-		}
-	}
-
-	// 4. R = ρ ρ_tilde
-	for (int a = 0; a < 4; a++) {
-		for (int b = 0; b < 4; b++) {
-			R[a][b].r = R[a][b].i = 0.0;
-			for (int k = 0; k < 4; k++) {
-				R[a][b].r += rho[a][k].r * rho_tilde[k][b].r - rho[a][k].i * rho_tilde[k][b].i;
-				R[a][b].i += rho[a][k].r * rho_tilde[k][b].i + rho[a][k].i * rho_tilde[k][b].r;
-			}
-		}
-	}
-
-	//4.5 Clean tiny imaginaries in R
-	double eps = 1e-10;
-
-	for (int a = 0; a < 4; a++)
-		for (int b = 0; b < 4; b++) {
-			if (fabs(rho[a][b].i) < eps) rho[a][b].i = 0;
-			if (fabs(R[a][b].i) < eps) R[a][b].i = 0;
-		}
-
-	// 5. Eigenvalues of R (real)
-	double evals[4];
-	hermitian_eigenvalues_4x4(R, evals);
-
-	// 6. Fix tiny negatives and sqrt
-	for (int i = 0; i < 4; i++) {
-		if (evals[i] < 0 && evals[i] > -1e-12) evals[i] = 0;
-		evals[i] = sqrt(evals[i]);
-	}
-
-	// 7. Sort descending
-	for (int i = 0; i < 4; i++)
-		for (int j = i + 1; j < 4; j++)
-			if (evals[j] > evals[i]) {
-				double tmp = evals[i];
-				evals[i] = evals[j];
-				evals[j] = tmp;
-			}
-
-	// 8. Wootters formula
-	double C = evals[0] - evals[1] - evals[2] - evals[3];
-	if (C < 0) C = 0;
-	return C;
-}
