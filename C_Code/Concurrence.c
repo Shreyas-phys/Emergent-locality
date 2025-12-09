@@ -90,7 +90,7 @@ int main()
 
 
 	//Writing to file to another directory
-	for (varyVariable = 2; varyVariable < 3; varyVariable += 1)
+	for (varyVariable = 7; varyVariable < 8; varyVariable += 1)
 	{
 		char filenameNA[256];
 		char filenameA[256];
@@ -126,7 +126,7 @@ int main()
 
 		//single deviation: centerspin = 0; // psia 
 		//ferromagnetic: centerspin = 1 //psib
-		for (centerspin = 0; centerspin < 1; centerspin++) //Automating the subtraction process
+		for (centerspin = 10; centerspin < 11; centerspin++) //Automating the subtraction process
 		{
 			int nsmax = 20;
 			//int nsmax = varyVariable;
@@ -141,9 +141,9 @@ int main()
 			double J = 0; //NN interaction in x
 			//double J = (double)varyVariable / 20;
 			//double Jlong = 0; //long range in x direction
-			double Jlong = 2;// (double)varyVariable / 30;
+			double Jlong = 0;// (double)varyVariable / 30;
 			//double Jz = (double)varyVariable / 10; //NN interaction in z
-			double Jz = 1;// 1.0;
+			double Jz = 0;// 1.0;
 			double alpha = 20.0; //short range interaction in x
 			double alphalong = 0.5; //long range interaction in x
 			//double alphalong = (double)varyVariable/10;
@@ -504,7 +504,7 @@ int main()
 					printf("\n");
 				}*/
 
-				for (t = 0; t < 2.01; t += dt) { // start time loop//////////////////////////////////////////////////////////////////////////time
+				for (t = 0; t < 1.01; t += dt) { // start time loop//////////////////////////////////////////////////////////////////////////time
 
 					/*
 					if (dyn == 0) for (j = 0; j < n; j++) {  //sum over basis states if using diagonalization method
@@ -670,7 +670,21 @@ int main()
 									////rho11[k] -= pr;
 								}
 							}
+							
 						}
+
+						double avg_sigma_p = Correlation2[perturbedSite];
+
+						for (k = 0; k < ns; k++) {
+
+							//redefining since I want to overload crossCorrelation variable
+							double avg_sigma_k = Correlation2[k];
+							double two_point = crossCorrelation[k];
+
+							/* Connected correlator C(k,p) */
+							crossCorrelation[k] = two_point - avg_sigma_k * avg_sigma_p;
+						}
+
 						if (it % 1000 == 0) {
 							for (k = 0; k < ns; k++) {
 
@@ -682,6 +696,13 @@ int main()
 								complex rho[4][4];
 								compute_rho_pj(rho, psit, ns, perturbedSite, k);
 
+								/*printf("TEST: rho for ( |00> + |11> ) / sqrt(2)\n");
+								for (int a = 0; a < 4; a++) {
+									for (int b = 0; b < 4; b++) {
+										printf("(% .12f, % .12f) ", (double)rho[a][b].r, (double)rho[a][b].i);
+									}
+									printf("\n");
+								}*/
 								double tr = 0.0;
 								/* checking trace */
 								/*;
@@ -1058,82 +1079,146 @@ void cutspins(int ind, int* s) // convert integer basis element ind to spin chai
 	return;
 }
 
-void compute_rho_pj(complex rho[4][4],
-	doublecomplex* psit,
-	int ns,
-	int p,
-	int j)
-{
-	int dim = (int)n;
-	int num_env = 1 << (ns - 2);
 
-	// ----- allocate psi_env[e][a] in double precision -----
+
+void compute_rho_pj(complex rho[4][4], doublecomplex* psit,	int ns,	int p,	int j)
+	// ============================================================================
+	// compute_rho_pj
+	// Computes the reduced 2-spin density matrix ρ_{p,j} for spins (p, j)
+	// by tracing out all other spins from the full state |ψ⟩.
+	//
+	// INPUTS
+	//   rho[4][4]   : OUTPUT 2-qubit density matrix (single precision complex)
+	//   psit        : INPUT full wavefunction (dimension 2^ns), double complex
+	//   ns          : number of spins in the chain
+	//   p, j        : the two spin indices for which ρ_{p,j} is computed
+	//
+	// METHOD
+	//   Step A: For each basis state |s⟩, decompose the bitstring into:
+	//           - (sp, sj): the two selected spins p and j
+	//           - e       : integer encoding the environment (all other spins)
+	//
+	//           Then accumulate psi_env[e][a] = amplitude of |a⟩ tensor |e⟩
+	//           where a = 2*sp + sj ∈ {0,1,2,3} labels the 2-spin subsystem.
+	//
+	//   Step B: Perform ρ_{a,b} = Σ_e psi_env[e][a] * conj(psi_env[e][b])
+	//           which is the partial trace over the environment.
+	//
+	//   Output is stored in rho[a][b] (float complex).
+	// ============================================================================
+{
+	int dim = (int)n;            // total Hilbert-space dimension = 2^ns
+	int num_env = 1 << (ns - 2); // environment dimension = 2^(ns-2)
+
+	// ------------------------------------------------------------------------
+	// Allocate psi_env[e][a]
+	//   e = 0 … 2^(ns−2)−1 enumerates the environment states
+	//   a = 0 … 3 enumerates states of the 2 selected spins (p,j)
+	//
+	// psi_env[e][a] = Σ_s ψ[s]  over all basis states s that map to (a,e)
+	// ------------------------------------------------------------------------
 	doublecomplex** psi_env = malloc(num_env * sizeof(doublecomplex*));
 	for (int e = 0; e < num_env; e++) {
 		psi_env[e] = malloc(4 * sizeof(doublecomplex));
+		// initialize all amplitudes to zero
 		for (int a = 0; a < 4; a++) {
 			psi_env[e][a].r = 0.0;
 			psi_env[e][a].i = 0.0;
 		}
 	}
 
-	int* list1 = malloc(ns * sizeof(int));
+	int* list1 = malloc(ns * sizeof(int)); // will hold spin values {0,1} for basis state s
 
-	// ----- STEP (A): build psi_env[e][a] -----
+	// ------------------------------------------------------------------------
+	// STEP (A): Build psi_env[e][a]
+	//
+	// Loop over all basis states |s⟩.
+	// We decompose the integer s into ns spin bits (list1[]).
+	// ------------------------------------------------------------------------
 	for (int s = 0; s < dim; s++) {
 
-		cutspins(s, list1);   // fills list1[k]
+		// Decompose s into a bitstring: list1[k] = spin value at site k
+		cutspins(s, list1);
 
+		// Extract the two target spins p and j
 		int sp = list1[p];
 		int sj = list1[j];
-		int aidx = 2 * sp + sj;  // (00,01,10,11) → 0..3
 
-		// build environment index e by packing remaining spins
+		// Map (sp, sj) to subsystem index a ∈ {0,1,2,3}
+		// (00→0, 01→1, 10→2, 11→3)
+		int aidx = 2 * sp + sj;
+
+		// ----------------------------------------------------
+		// Build the environment index e by packing all spins
+		// except p and j into a binary integer.
+		// ----------------------------------------------------
 		int e = 0;
 		int pos = 0;
 		for (int k = 0; k < ns; k++) {
 			if (k == p || k == j)
 				continue;
+
+			// Shift list1[k] into correct bit position
 			e |= (list1[k] << pos);
 			pos++;
 		}
 
-		// accumulate psi_env[e][a] += psit[s]  (psit is doubleprecision)
+		// ----------------------------------------------------
+		// Accumulate psi_env[e][a] += ψ[s]
+		//
+		// All full-state amplitudes with the same (a,e) contribute
+		// because tracing over environment groups them together.
+		// ----------------------------------------------------
 		psi_env[e][aidx].r += psit[s].r;
 		psi_env[e][aidx].i += psit[s].i;
 	}
 
-	free(list1);
+	free(list1);  // no longer needed
 
-	// ----- STEP (B): build rho_x[a][b] in double precision -----
+	// ------------------------------------------------------------------------
+	// STEP (B): Construct the 4×4 reduced density matrix ρ_x (double precision)
+	// ρ_x[a][b] = Σ_e psi_env[e][a] * conj(psi_env[e][b])
+	// ------------------------------------------------------------------------
 	doublecomplex rho_x[4][4];
+
+	// initialize rho_x to zero
 	for (int a = 0; a < 4; a++)
 		for (int b = 0; b < 4; b++)
 			rho_x[a][b].r = rho_x[a][b].i = 0.0;
 
+	// sum over environment
 	for (int e = 0; e < num_env; e++) {
 		for (int a = 0; a < 4; a++) {
+
 			double ar = psi_env[e][a].r;
 			double ai = psi_env[e][a].i;
+
 			for (int b = 0; b < 4; b++) {
+
 				double br = psi_env[e][b].r;
 				double bi = psi_env[e][b].i;
-				// psi_env[e][a] * conj(psi_env[e][b])
+
+				// Multiply psi_env[e][a] * conj(psi_env[e][b])
+				// Real part:  ar*br + ai*bi
+				// Imag part:  ai*br - ar*bi
 				rho_x[a][b].r += (ar * br + ai * bi);
 				rho_x[a][b].i += (ai * br - ar * bi);
 			}
 		}
 	}
 
-	// copy (with conversion) into output rho (single-precision complex)
+	// ------------------------------------------------------------------------
+	// Copy result into output rho (single precision)
+	// ------------------------------------------------------------------------
 	for (int a = 0; a < 4; a++)
 		for (int b = 0; b < 4; b++) {
 			rho[a][b].r = (real)rho_x[a][b].r;
 			rho[a][b].i = (real)rho_x[a][b].i;
 		}
 
-	// free psi_env
-	for (int e = 0; e < num_env; e++) free(psi_env[e]);
+	// cleanup
+	for (int e = 0; e < num_env; e++)
+		free(psi_env[e]);
 	free(psi_env);
 }
 
