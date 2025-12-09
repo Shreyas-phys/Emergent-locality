@@ -5,7 +5,6 @@
 #include "f2c.h"
 #include <time.h>
 
-
 #define ARR_D(i) (double *) calloc(i, sizeof(double))
 #define ARR_DC(i) (doublecomplex *) calloc(i, sizeof(doublecomplex))
 #define ARR_I(i) (int *) calloc(i, sizeof(int))
@@ -22,9 +21,6 @@ void rk(double* ham, doublecomplex* psi, doublecomplex* psi1, double dt);
 void multvec(double fact, doublecomplex* v, doublecomplex* v1);
 void multveci(double fact, doublecomplex* v, doublecomplex* v1);
 void addmultvec(doublecomplex* v0, double fact, doublecomplex* v, doublecomplex* v1);
-void compute_rho_pj(complex rho_z[4][4], doublecomplex* psit, int ns, int p, int j);
-//double compute_concurrence(complex rho_z[4][4]);
-//void hermitian_eigenvalues_4x4(complex A[4][4], double evals[4]);
 
 int choose(int n, int k);
 int cutind(int* list);
@@ -41,8 +37,10 @@ double* ham2;
 int* hind1, * hind2;
 int* mxsave;
 
+//int main()
 int main()
 {
+
 	srand(time(NULL));
 	int zgeevx_(char* balanc, char* doevl, char* doevr, char* rcnum,
 		integer * n, doublecomplex * prop, integer * ldprop,
@@ -58,7 +56,7 @@ int main()
 
 
 
-	double* ham, * eval, * work, t, * dens, * probSpinFlip0, * probSpinFlip1, pr, rem, e0, mx, * crossCorrelation, * Correlation2, * Concurrence;
+	double* ham, * eval, * work, t, * dens, * probSpinFlip0, * probSpinFlip1, pr, rem, e0, mx, * crossCorrelation, * Correlation2;
 	double* rho11a, * rho12ra, * rho12ia;
 	double* rho11na, * rho12rna, * rho12ina;
 	double d0, d1, d2, d3, d5, p, maxd, maxd2, * ts, * ds, * d2s, * ds0, * ds2, savenorm;
@@ -71,8 +69,7 @@ int main()
 	int dist;
 	int centerspin;
 	int varyVariable;
-	FILE* data, * survf, * fdens, * frhoa, * frhona, * fCorrelationFunc, * fCorrelation2, * fConcurrence;
-
+	FILE* data, * survf, * fdens, * frhoa, * frhona, * fCorrelationFunc, * fCorrelation2;
 
 	int dyn = 1; //0 means use diagonalization, 1 means use runge kutta
 	int flip = 0;
@@ -83,14 +80,14 @@ int main()
 	FILE* fBandProbs;
 
 	//mentions base file location
-	char* base = "D:\\OneDrive - Tulane University\\RESEARCH\\Quantum transport\\Code\\Plots\\B0LFIMwithLR\\Projectedband2ConcurrenceTest";
+	char* base = "D:\\OneDrive - Tulane University\\RESEARCH\\Quantum transport\\Code\\Plots\\B0LFIMwithLR\\N15Jz1a02b2Jx02BxVaried";
 	//char* base = "TestIPHJlongVariedN13Saturation";//// code to send to cypress
 	FILE* energy = fopen("D:\\OneDrive - Tulane University\\RESEARCH\\Quantum transport\\Code\\Plots\\TFIMwithLR\\Energy.txt", "w");
 	//FILE* energy = fopen("Energy.txt", "w");
 
 
 	//Writing to file to another directory
-	for (varyVariable = 7; varyVariable < 8; varyVariable += 1)
+	for (varyVariable = 0; varyVariable < 1; varyVariable += 1)////////////////////////////////////////to run locally, comment this line to run on cypress
 	{
 		char filenameNA[256];
 		char filenameA[256];
@@ -99,7 +96,7 @@ int main()
 		char filenameCorrelationFunction[256];
 		char filenameCorrelation2[256];
 		char filenamebandProbabilities[256];
-		char filenameConcurrence[256];
+
 
 		// dynamically changes filename while in varyVariable loop
 		sprintf(filenameNA, "%s%d%s.txt", base, varyVariable, "na");
@@ -109,7 +106,7 @@ int main()
 		sprintf(filenameCorrelationFunction, "%s%d%s.txt", base, varyVariable, "CorrelationFunction");
 		sprintf(filenameCorrelation2, "%s%d%s.txt", base, varyVariable, "Correlation2");
 		sprintf(filenamebandProbabilities, "%s%d%s.txt", base, varyVariable, "BandProbs");
-		sprintf(filenameConcurrence, "%s%d%s.txt", base, varyVariable, "Concurrence");
+
 
 		fh_output = fopen(filenameNA, "w");
 		fh_output2 = fopen(filenameA, "w");
@@ -118,7 +115,6 @@ int main()
 		fCorrelationFunc = fopen(filenameCorrelationFunction, "w");
 		fCorrelation2 = fopen(filenameCorrelation2, "w");
 		fBandProbs = fopen(filenamebandProbabilities, "w");
-		fConcurrence = fopen(filenameConcurrence, "w");
 		fdens = fopen("D:\\OneDrive - Tulane University\\RESEARCH\\Quantum transport\\Code\\Plots\\Manifold\\fdens.txt", "w");
 		//fdens = fopen("fdens.txt", "w");
 
@@ -126,9 +122,9 @@ int main()
 
 		//single deviation: centerspin = 0; // psia 
 		//ferromagnetic: centerspin = 1 //psib
-		for (centerspin = 10; centerspin < 11; centerspin++) //Automating the subtraction process
+		for (centerspin = 0; centerspin < 2; centerspin++) //Automating the subtraction process
 		{
-			int nsmax = 20;
+			int nsmax = 15;
 			//int nsmax = varyVariable;
 			ns = nsmax; // number of spins
 			n = 1 << nsmax; //matrix dimension, left shifting: a<<b = a*2^b. In this case 1<<ns = 2^ns
@@ -137,22 +133,23 @@ int main()
 			////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			double B = 0.0; //magnetic field in z direction
 			//double B = (double)varyVariable/2;
+			double Bx = (double)varyVariable / 10; //transverse field in x direction
 			double W = 0.0; // disorder strength
 			double J = 0; //NN interaction in x
 			//double J = (double)varyVariable / 20;
 			//double Jlong = 0; //long range in x direction
-			double Jlong = 0;// (double)varyVariable / 30;
+			double Jlong = 0.2;// (double)varyVariable / 100;
 			//double Jz = (double)varyVariable / 10; //NN interaction in z
-			double Jz = 0;// 1.0;
+			double Jz = 1;// 1.0;
 			double alpha = 20.0; //short range interaction in x
-			double alphalong = 0.5; //long range interaction in x
+			double alphalong = 0.2; //long range interaction in x
 			//double alphalong = (double)varyVariable/10;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			//superposition state parametrization
 			//double epsilon = (double)varyVariable / 100;
 			double epsilon = 0.01;
-			double thetaa = pi_value / 2;
-			double thetab = 0;// pi_value;// / 2 + epsilon;
+			double thetaa = 0;// pi_value / 2;
+			double thetab = pi_value;// / 2 + epsilon;
 			double phia = 0;
 			double phib = 0;
 
@@ -175,7 +172,7 @@ int main()
 
 			for (ns = nsmax; ns <= nsmax; ns += 2) {  //loop over number of spins
 
-				int maxflips = 2;
+				int maxflips = nsmax;
 				int ncutstates = 0;
 				for (i = 0; i <= maxflips; i++) ncutstates += choose(ns, i);
 				n = ncutstates;
@@ -198,7 +195,7 @@ int main()
 				sumVlong = 0; // rescale Jlong using exact Kac prescription 
 				for (k = 0; k < ns; k++) for (kp = 0; kp < k; kp++)
 					sumVlong += 1 / pow(k - kp, alphalong);
-				Jlong = Jlong * ns / sumVlong;
+				//Jlong = Jlong * ns / sumVlong;
 				//Jlong = 1;
 				//check
 				double sumVlongcheck = sumVlong;
@@ -216,12 +213,13 @@ int main()
 				}
 				*/
 
+
 				if (dyn) {
 					t1 = ARR_DC(n); t2 = ARR_DC(n); t3 = ARR_DC(n);
 					k1 = ARR_DC(n); k2 = ARR_DC(n); k3 = ARR_DC(n); k4 = ARR_DC(n);
 				}
 
-				dens = ARR_D(n); mxsave = ARR_I(n); probSpinFlip0 = ARR_D(n); probSpinFlip1 = ARR_D(n); crossCorrelation = ARR_D(n); Correlation2 = ARR_D(n); Concurrence = ARR_D(n);
+				dens = ARR_D(n); mxsave = ARR_I(n); probSpinFlip0 = ARR_D(n); probSpinFlip1 = ARR_D(n); crossCorrelation = ARR_D(n); Correlation2 = ARR_D(n);
 				rho11a = ARR_D(n); rho12ra = ARR_D(n); rho12ia = ARR_D(n);
 				rho11na = ARR_D(n); rho12rna = ARR_D(n); rho12ina = ARR_D(n);
 
@@ -265,7 +263,7 @@ int main()
 				int perturbedSite = 1; //perturbation on site 2
 
 				//psi1
-				list1[perturbedSite] = list1[17] = 0; //perturbation on site 2 //not a full spin flip
+				list1[perturbedSite] = list1[10] = 0; //perturbation on site 2 //not a full spin flip
 				initb1 = cutind(list1);
 				//real part of psi
 				psi[initb1].r = cos(thetaa / 2);
@@ -317,6 +315,12 @@ int main()
 							list2[k] = 1 - list2[k];
 						}
 
+					// Bx is diagonal in the x-basis: add diagonal contribution sum_k Bx * s_k (s_k = +-1)
+					double sumBx = 0.0;
+					for (int kk = 0; kk < ns; kk++) {
+						int s_k = (list1[kk] == 1) ? 1 : -1; // list1 holds local spin value (1 or 0), map to +-1
+						sumBx += Bx * s_k;
+					}
 
 					//for (k = 0; k < ns; k++) {/////////////////////////////////////////////////////////////////////////////////////////////PBC
 					for (k = 0; k < ns - 1; k++) {////////////////////////////////////////////////////////////////////////////////////////OBC
@@ -344,6 +348,8 @@ int main()
 						list2[k] = 1 - list2[k];
 						list2[next_spin_index] = 1 - list2[next_spin_index];
 					}
+
+					
 
 					/*
 					for (int k = 0; k < ns - 1; k++) {
@@ -423,7 +429,8 @@ int main()
 					if (i == initb1) printf("Q %lf\n", sumV);
 
 
-					ham2[nham] = sumV + sumVlong; hind1[nham] = i; hind2[nham] = i; nham++;
+					ham2[nham] = sumV + sumVlong + sumBx;
+					hind1[nham] = i; hind2[nham] = i; nham++;
 				}
 
 				//exit(0);
@@ -488,23 +495,8 @@ int main()
 
 				it = 0;
 				dt = 0.00001;  //time step
-				// copy initial state once
 				for (i = 0; i < n; i++) psit[i] = psi[i];  // psi at time 0
-
-				// INIT diagnostic (run once, immediately after copying)
-				/*{
-					double psit_norm = 0.0;
-					int dim = (int)n;
-					for (int ii = 0; ii < dim; ii++)
-						psit_norm += psit[ii].r * psit[ii].r + psit[ii].i * psit[ii].i;
-					printf("INIT CHECK: dim=%d ns=%d psit_norm=%.12e\n", dim, ns, psit_norm);
-					int printN = MIN(dim, 8);
-					printf("INIT CHECK: first %d amplitudes:", printN);
-					for (int ii = 0; ii < printN; ii++) printf(" (% .6e,% .6e)", psit[ii].r, psit[ii].i);
-					printf("\n");
-				}*/
-
-				for (t = 0; t < 1.01; t += dt) { // start time loop//////////////////////////////////////////////////////////////////////////time
+				for (t = 0; t < 2.01; t += dt) { // start time loop//////////////////////////////////////////////////////////////////////////time
 
 					/*
 					if (dyn == 0) for (j = 0; j < n; j++) {  //sum over basis states if using diagonalization method
@@ -535,12 +527,11 @@ int main()
 					for (k = 0; k < ns; k++) {
 						crossCorrelation[k] = 0.0;
 						Correlation2[k] = 0.0;
-						Concurrence[k] = 0.0;
 					}
 
 					// now let's calculate spin densities at time t
-					//if (fabs(t * 1000 - round(t * 1000)) < 0.0001) {
-					if (1) {
+					if (fabs(t * 100 - round(t * 100)) < 0.001) {
+					//if (1) {
 						for (k = 0; k < ns; k++)
 						{
 							dens[k] = 0.; //initialize densities to 0
@@ -627,6 +618,7 @@ int main()
 									//rho12i[k] += psit[i].i * psit[j].r - psit[i].r * psit[j].i;
 									if (centerspin == 0) //i.e spins are not aligned
 									{
+
 										dens[k] += pr;
 										//probSpinFlip0[k] += pr;
 										rho11na[k] += pr;
@@ -670,7 +662,6 @@ int main()
 									////rho11[k] -= pr;
 								}
 							}
-							
 						}
 
 						double avg_sigma_p = Correlation2[perturbedSite];
@@ -684,49 +675,6 @@ int main()
 							/* Connected correlator C(k,p) */
 							crossCorrelation[k] = two_point - avg_sigma_k * avg_sigma_p;
 						}
-
-						if (it % 1000 == 0) {
-							for (k = 0; k < ns; k++) {
-
-								if (k == perturbedSite) {
-									/* skip self-reduced density matrix */
-									continue;
-								}
-
-								complex rho[4][4];
-								compute_rho_pj(rho, psit, ns, perturbedSite, k);
-
-								/*printf("TEST: rho for ( |00> + |11> ) / sqrt(2)\n");
-								for (int a = 0; a < 4; a++) {
-									for (int b = 0; b < 4; b++) {
-										printf("(% .12f, % .12f) ", (double)rho[a][b].r, (double)rho[a][b].i);
-									}
-									printf("\n");
-								}*/
-								double tr = 0.0;
-								/* checking trace */
-								/*;
-								for (int a = 0; a < 4; a++) tr += rho[a][a].r;
-								printf("t=%g, p=%d, j=%d, trace(rho) = %.12f\n", t, perturbedSite, k, tr);*/
-
-								/* Write reduced 2-spin density matrix into fConcurrence:
-								   Format per line:
-								   time perturbedSite j trace  (for a=0..3, b=0..3) Re(rho[a][b]) Im(rho[a][b])
-								*/
-								if (fConcurrence) {
-									fprintf(fConcurrence, "%1.15e %d %d %0.15f", t, perturbedSite, k, tr);
-									for (int a = 0; a < 4; ++a) {
-										for (int b = 0; b < 4; ++b) {
-											fprintf(fConcurrence, " % .15e % .15e", (double)rho[a][b].r, (double)rho[a][b].i);
-										}
-									}
-									fprintf(fConcurrence, "\n");
-								}
-							}
-							/* ensure partial results are flushed during long runs */
-							if (fConcurrence) fflush(fConcurrence);
-						}
-					
 					}
 
 
@@ -800,13 +748,11 @@ int main()
 							fprintf(frhona, "%1.2e", t);
 							fprintf(fCorrelationFunc, "%1.2e", t);
 							fprintf(fCorrelation2, "%1.2e", t);
-							//fprintf(fConcurrence, "%1.2e", t);
 							printf("%1.2f ", t);
 							for (k = 0; k < ns; k++) {
 								fprintf(fh_output, " %0.15f", rho11na[k]);
 								fprintf(fCorrelationFunc, " %0.15f", crossCorrelation[k]);
 								fprintf(fCorrelation2, " %0.15f", Correlation2[k]);
-								//fprintf(fConcurrence, " %0.15f", Concurrence[k]);
 								fprintf(frhona, " %0.15f %0.15f %0.15f", rho11na[k], rho12rna[k], rho12ina[k]);
 								//printf(" %0.15f %0.15f %0.15f", rho11na[k], rho12rna[k], rho12ina[k]);
 								//printf("%0.15f", probSpinFlip0[k]);
@@ -816,7 +762,6 @@ int main()
 							fprintf(frhona, "\n");
 							fprintf(fCorrelationFunc, "\n");
 							fprintf(fCorrelation2, "\n");
-							//fprintf(fConcurrence, "\n");
 							//printf("centerspin %d", centerspin);
 							//printf("\n");
 							//printf("\n");
@@ -896,7 +841,6 @@ int main()
 		fclose(fh_output2);
 		fclose(fCorrelationFunc);
 		fclose(fCorrelation2);
-		fclose(fConcurrence);
 	}
 
 	fclose(energy);
@@ -967,7 +911,7 @@ void Hpsi(double* ham, doublecomplex* psi, doublecomplex* psi1) { // psi1 = H*ps
 void Hpsi2(doublecomplex* psi, doublecomplex* psi1) {  //psi1 = H*psi but using nonzero elements of H (stored in ham2)
 	for (int i = 0; i < n; i++)
 		psi1[i].r = psi1[i].i = 0.0;
-	for (int j = 0; j < nham; j++) if (mxsave[hind1[j]] == mxsave[hind2[j]]) { //Restricted multiplication, conserving total magnetization
+	for (int j = 0; j < nham; j++) {//if (mxsave[hind1[j]] == mxsave[hind2[j]]) { //Restricted multiplication, conserving total magnetization
 		//printf("which band %d %d\n", mxsave[hind1[j]], mxsave[hind2[j]]);
 		psi1[hind1[j]].r += ham2[j] * psi[hind2[j]].r;
 		psi1[hind1[j]].i += ham2[j] * psi[hind2[j]].i;
@@ -1078,148 +1022,3 @@ void cutspins(int ind, int* s) // convert integer basis element ind to spin chai
 
 	return;
 }
-
-
-
-void compute_rho_pj(complex rho[4][4], doublecomplex* psit,	int ns,	int p,	int j)
-	// ============================================================================
-	// compute_rho_pj
-	// Computes the reduced 2-spin density matrix ρ_{p,j} for spins (p, j)
-	// by tracing out all other spins from the full state |ψ⟩.
-	//
-	// INPUTS
-	//   rho[4][4]   : OUTPUT 2-qubit density matrix (single precision complex)
-	//   psit        : INPUT full wavefunction (dimension 2^ns), double complex
-	//   ns          : number of spins in the chain
-	//   p, j        : the two spin indices for which ρ_{p,j} is computed
-	//
-	// METHOD
-	//   Step A: For each basis state |s⟩, decompose the bitstring into:
-	//           - (sp, sj): the two selected spins p and j
-	//           - e       : integer encoding the environment (all other spins)
-	//
-	//           Then accumulate psi_env[e][a] = amplitude of |a⟩ tensor |e⟩
-	//           where a = 2*sp + sj ∈ {0,1,2,3} labels the 2-spin subsystem.
-	//
-	//   Step B: Perform ρ_{a,b} = Σ_e psi_env[e][a] * conj(psi_env[e][b])
-	//           which is the partial trace over the environment.
-	//
-	//   Output is stored in rho[a][b] (float complex).
-	// ============================================================================
-{
-	int dim = (int)n;            // total Hilbert-space dimension = 2^ns
-	int num_env = 1 << (ns - 2); // environment dimension = 2^(ns-2)
-
-	// ------------------------------------------------------------------------
-	// Allocate psi_env[e][a]
-	//   e = 0 … 2^(ns−2)−1 enumerates the environment states
-	//   a = 0 … 3 enumerates states of the 2 selected spins (p,j)
-	//
-	// psi_env[e][a] = Σ_s ψ[s]  over all basis states s that map to (a,e)
-	// ------------------------------------------------------------------------
-	doublecomplex** psi_env = malloc(num_env * sizeof(doublecomplex*));
-	for (int e = 0; e < num_env; e++) {
-		psi_env[e] = malloc(4 * sizeof(doublecomplex));
-		// initialize all amplitudes to zero
-		for (int a = 0; a < 4; a++) {
-			psi_env[e][a].r = 0.0;
-			psi_env[e][a].i = 0.0;
-		}
-	}
-
-	int* list1 = malloc(ns * sizeof(int)); // will hold spin values {0,1} for basis state s
-
-	// ------------------------------------------------------------------------
-	// STEP (A): Build psi_env[e][a]
-	//
-	// Loop over all basis states |s⟩.
-	// We decompose the integer s into ns spin bits (list1[]).
-	// ------------------------------------------------------------------------
-	for (int s = 0; s < dim; s++) {
-
-		// Decompose s into a bitstring: list1[k] = spin value at site k
-		cutspins(s, list1);
-
-		// Extract the two target spins p and j
-		int sp = list1[p];
-		int sj = list1[j];
-
-		// Map (sp, sj) to subsystem index a ∈ {0,1,2,3}
-		// (00→0, 01→1, 10→2, 11→3)
-		int aidx = 2 * sp + sj;
-
-		// ----------------------------------------------------
-		// Build the environment index e by packing all spins
-		// except p and j into a binary integer.
-		// ----------------------------------------------------
-		int e = 0;
-		int pos = 0;
-		for (int k = 0; k < ns; k++) {
-			if (k == p || k == j)
-				continue;
-
-			// Shift list1[k] into correct bit position
-			e |= (list1[k] << pos);
-			pos++;
-		}
-
-		// ----------------------------------------------------
-		// Accumulate psi_env[e][a] += ψ[s]
-		//
-		// All full-state amplitudes with the same (a,e) contribute
-		// because tracing over environment groups them together.
-		// ----------------------------------------------------
-		psi_env[e][aidx].r += psit[s].r;
-		psi_env[e][aidx].i += psit[s].i;
-	}
-
-	free(list1);  // no longer needed
-
-	// ------------------------------------------------------------------------
-	// STEP (B): Construct the 4×4 reduced density matrix ρ_x (double precision)
-	// ρ_x[a][b] = Σ_e psi_env[e][a] * conj(psi_env[e][b])
-	// ------------------------------------------------------------------------
-	doublecomplex rho_x[4][4];
-
-	// initialize rho_x to zero
-	for (int a = 0; a < 4; a++)
-		for (int b = 0; b < 4; b++)
-			rho_x[a][b].r = rho_x[a][b].i = 0.0;
-
-	// sum over environment
-	for (int e = 0; e < num_env; e++) {
-		for (int a = 0; a < 4; a++) {
-
-			double ar = psi_env[e][a].r;
-			double ai = psi_env[e][a].i;
-
-			for (int b = 0; b < 4; b++) {
-
-				double br = psi_env[e][b].r;
-				double bi = psi_env[e][b].i;
-
-				// Multiply psi_env[e][a] * conj(psi_env[e][b])
-				// Real part:  ar*br + ai*bi
-				// Imag part:  ai*br - ar*bi
-				rho_x[a][b].r += (ar * br + ai * bi);
-				rho_x[a][b].i += (ai * br - ar * bi);
-			}
-		}
-	}
-
-	// ------------------------------------------------------------------------
-	// Copy result into output rho (single precision)
-	// ------------------------------------------------------------------------
-	for (int a = 0; a < 4; a++)
-		for (int b = 0; b < 4; b++) {
-			rho[a][b].r = (real)rho_x[a][b].r;
-			rho[a][b].i = (real)rho_x[a][b].i;
-		}
-
-	// cleanup
-	for (int e = 0; e < num_env; e++)
-		free(psi_env[e]);
-	free(psi_env);
-}
-
-
