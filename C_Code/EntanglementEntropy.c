@@ -93,7 +93,7 @@ int main()
 
 
 	//Writing to file to another directory
-	for (varyVariable = 3; varyVariable < 4; varyVariable += 1)
+	for (varyVariable = 5; varyVariable < 6; varyVariable += 1)
 	{
 		char filenameNA[256];
 		char filenameA[256];
@@ -131,7 +131,7 @@ int main()
 		//ferromagnetic: centerspin = 1 //psib
 		for (centerspin = 0; centerspin < 1; centerspin++) //Automating the subtraction process
 		{
-			int nsmax = 10;
+			int nsmax = 4;
 			//int nsmax = varyVariable;
 			ns = nsmax; // number of spins
 			n = 1 << nsmax; //matrix dimension, left shifting: a<<b = a*2^b. In this case 1<<ns = 2^ns
@@ -148,13 +148,13 @@ int main()
 			//double Jz = (double)varyVariable / 10; //NN interaction in z
 			double Jz = 1;// 1.0;
 			double alpha = 20.0; //short range interaction in x
-			double alphalong = 1000.5; //long range interaction in x
+			double alphalong = 0.5; //long range interaction in x
 			//double alphalong = (double)varyVariable/10;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			//superposition state parametrization
 			//double epsilon = (double)varyVariable / 100;
 			double epsilon = 0.01;
-			double thetaa = 0;// pi_value / 2;
+			double thetaa = pi_value / 2;
 			double thetab = 0;// pi_value;// / 2 + epsilon;
 			double phia = 0;
 			double phib = 0;
@@ -278,7 +278,7 @@ int main()
 				list1[perturbedSite] = 1; // reverting site 2 perturbation
 				//list1[nsmax-2] = 0; // perturbation on site ns-1
 				//list1[varyVariable-1] = 0; // perturbation on site varyVariable
-				list1[7] = 0; // perturbation on site 3
+				list1[3] = 0; // perturbation on site 3
 				initb2 = cutind(list1);
 				psi[initb2].r += cos(phia) * sin(thetaa / 2);
 				psi[initb2].i = sin(phia) * sin(thetaa / 2);
@@ -410,7 +410,7 @@ int main()
 					for (k = 0; k < ns; k++) for (kp = 0; kp < k; kp++) {
 						dist = k - kp;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////OBC
 						//dist = MIN(k - kp, ns + kp - k); /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////PBC
-						if (abs(k - kp) == 1)//*//////////////////////////////////////////////////////////////////////////////////////// |n-m|=1 NN coupling only, OBC
+						//if (abs(k - kp) == 1)//*//////////////////////////////////////////////////////////////////////////////////////// |n-m|=1 NN coupling only, OBC
 						{
 							//{
 								//printf("%s %d %s %d\n","n=", k, "m=", kp);
@@ -545,8 +545,8 @@ int main()
 					}
 
 					// now let's calculate spin densities at time t
-					//if (fabs(t * 1000 - round(t * 1000)) < 0.0001) {
-					if (1) {
+					if (fabs(t * 1000 - round(t * 1000)) < 0.0001)
+					{
 						for (k = 0; k < ns; k++)
 						{
 							dens[k] = 0.; //initialize densities to 0
@@ -815,13 +815,16 @@ int main()
 						rk(ham2, psit, psitdt, dt);
 						for (i = 0; i < n; i++) psit[i] = psitdt[i];
 					}
-
-
-					//fprintf(fdens, "%1.2e", t);
-					for (k = 0; k < ns; k++)
-						fprintf(fdens, " %0.15f", dens[k]);
-					fprintf(fdens, "\n");
-
+					////////////////////////////////////////////////fdens
+					//if (it % 1000 == 0) {
+					//	//fprintf(fdens, "%1.2e", t);
+					//	for (k = 0; k < ns; k++)
+					//		fprintf(fdens, " %0.15f", dens[k]);
+					//	fprintf(fdens, "\n");
+					//}
+					// 
+					// 
+					// 
 					////print out densities, should be (1-probspin flip)/2
 					//fprintf(fdens, "%lf ", t);
 					//printf("%lf ", t);
